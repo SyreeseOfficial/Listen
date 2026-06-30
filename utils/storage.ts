@@ -38,7 +38,30 @@ export type UserProfile = {
 const KEYS = {
   sessions: 'sessions',
   profile: 'profile',
+  pendingSession: 'pendingSession',
 } as const;
+
+export type PendingSession = {
+  sessionId: string;
+  minutes: string;
+  totalSeconds: number;
+  remainingSeconds: number;
+  equipment: string;
+  savedAt: string;
+};
+
+export async function savePendingSession(s: PendingSession): Promise<void> {
+  await AsyncStorage.setItem(KEYS.pendingSession, JSON.stringify(s));
+}
+
+export async function getPendingSession(): Promise<PendingSession | null> {
+  const raw = await AsyncStorage.getItem(KEYS.pendingSession);
+  return raw ? JSON.parse(raw) : null;
+}
+
+export async function clearPendingSession(): Promise<void> {
+  await AsyncStorage.removeItem(KEYS.pendingSession);
+}
 
 export async function getSessions(): Promise<Session[]> {
   const raw = await AsyncStorage.getItem(KEYS.sessions);

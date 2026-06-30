@@ -4,7 +4,7 @@ import {
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
-import { getProfile, getSessions } from '../../utils/storage';
+import { getProfile, getSessions, getPendingSession, clearPendingSession } from '../../utils/storage';
 import { computeStats, formatDuration } from '../../utils/stats';
 import { getFakeListenerCount, getMilestone, computeArchetype, getIdentityMessage, getRegretInjection, getParasocialBuddy } from '../../utils/engagement';
 import { getLevelInfo, getStreakMultiplierLabel, getNearMissAchievements, getEndowedProgress } from '../../utils/xp';
@@ -180,6 +180,46 @@ export default function HomeScreen() {
   useEffect(() => {
     const interval = setInterval(() => setListenerCount(getFakeListenerCount()), 30000);
     return () => clearInterval(interval);
+  }, []);
+
+  // One-time check on app open: resume an interrupted session
+  useEffect(() => {
+    getPendingSession().then((pending) => {
+      if (!pending) return;
+      const elapsedSinceSave = Math.floor((Date.now() - new Date(pending.savedAt).getTime()) / 1000);
+      const adjustedRemaining = Math.max(0, pending.remainingSeconds - elapsedSinceSave);
+      const minsLeft = Math.ceil(adjustedRemaining / 60);
+
+      Alert.alert(
+        'Resume session?',
+        adjustedRemaining > 0
+          ? `You have ${minsLeft} minute${minsLeft !== 1 ? 's' : ''} left in an active session.`
+          : "Your timer ran out while the app was closed.",
+        [
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => clearPendingSession(),
+          },
+          {
+            text: adjustedRemaining > 0 ? 'Resume' : 'Finish session',
+            onPress: () => {
+              router.push({
+                pathname: '/session',
+                params: {
+                  minutes: pending.minutes,
+                  equipment: pending.equipment,
+                  resumeRemaining: String(adjustedRemaining),
+                  resumeTotal: String(pending.totalSeconds),
+                  sessionId: pending.sessionId,
+                },
+              });
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+    });
   }, []);
 
   function handleStart() {

@@ -6,28 +6,55 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as KeepAwake from 'expo-keep-awake';
 import { useTheme } from '../context/ThemeContext';
-import { saveSession, getProfile } from '../utils/storage';
+import { saveSession, getProfile, savePendingSession, clearPendingSession } from '../utils/storage';
 import { formatCountdown } from '../utils/stats';
 
 export default function SessionScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { minutes, equipment } = useLocalSearchParams<{ minutes: string; equipment: string }>();
-  const totalSeconds = parseInt(minutes ?? '30', 10) * 60;
+  const { minutes, equipment, resumeRemaining, resumeTotal, sessionId: paramSessionId } =
+    useLocalSearchParams<{
+      minutes: string;
+      equipment: string;
+      resumeRemaining?: string;
+      resumeTotal?: string;
+      sessionId?: string;
+    }>();
 
-  const [remaining, setRemaining] = useState(totalSeconds);
+  const totalSeconds = parseInt(minutes ?? '30', 10) * 60;
+  const initialRemaining = resumeRemaining ? parseInt(resumeRemaining, 10) : totalSeconds;
+  const initialTotal = resumeTotal ? parseInt(resumeTotal, 10) : totalSeconds;
+
+  const [remaining, setRemaining] = useState(initialRemaining);
   const [paused, setPaused] = useState(false);
-  const [sessionId] = useState(() => Date.now().toString());
-  const effectiveTotalRef = useRef(totalSeconds);
-  const remainingRef = useRef(totalSeconds);
+  const [sessionId] = useState(() => paramSessionId ?? Date.now().toString());
+
+  const effectiveTotalRef = useRef(initialTotal);
+  const remainingRef = useRef(initialRemaining);
   const autoCompleteRef = useRef(true);
-  const appState = useRef(AppState.currentState);
+  const pausedRef = useRef(false);
+  const backgroundAtRef = useRef<number | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   KeepAwake.useKeepAwake();
 
+  // Keep pausedRef in sync so AppState handler always sees current value
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
+
   useEffect(() => {
     getProfile().then((p) => { autoCompleteRef.current = p?.autoComplete ?? true; });
+  }, []);
+
+  // Save session to storage on mount so a force-kill can be recovered
+  useEffect(() => {
+    savePendingSession({
+      sessionId,
+      minutes: minutes ?? '30',
+      totalSeconds: effectiveTotalRef.current,
+      remainingSeconds: remainingRef.current,
+      equipment: equipment ?? '[]',
+      savedAt: new Date().toISOString(),
+    });
   }, []);
 
   useEffect(() => {
@@ -71,8 +98,44 @@ export default function SessionScreen() {
     return () => clearInterval(interval);
   }, [paused]);
 
+  // Background timing correction + pending session persistence
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => { appState.current = s; });
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        backgroundAtRef.current = Date.now();
+        // Persist latest state so a kill can be recovered
+        savePendingSession({
+          sessionId,
+          minutes: minutes ?? '30',
+          totalSeconds: effectiveTotalRef.current,
+          remainingSeconds: remainingRef.current,
+          equipment: equipment ?? '[]',
+          savedAt: new Date().toISOString(),
+        });
+      } else if (nextState === 'active' && backgroundAtRef.current !== null) {
+        if (!pausedRef.current) {
+          const elapsed = Math.round((Date.now() - backgroundAtRef.current) / 1000);
+          const newRemaining = Math.max(0, remainingRef.current - elapsed);
+          remainingRef.current = newRemaining;
+          setRemaining(newRemaining);
+          if (newRemaining <= 0) {
+            if (autoCompleteRef.current) {
+              finish(true);
+            } else {
+              Alert.alert(
+                'Timer reached zero',
+                'Finish your session or keep going?',
+                [
+                  { text: 'Keep going', style: 'cancel' },
+                  { text: 'Finish session', onPress: () => finish(true) },
+                ]
+              );
+            }
+          }
+        }
+        backgroundAtRef.current = null;
+      }
+    });
     return () => sub.remove();
   }, []);
 
@@ -92,6 +155,7 @@ export default function SessionScreen() {
   }
 
   async function finish(completed: boolean) {
+    await clearPendingSession();
     Haptics.notificationAsync(
       completed ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning
     );
