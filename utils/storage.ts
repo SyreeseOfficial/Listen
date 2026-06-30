@@ -29,6 +29,7 @@ export type UserProfile = {
   listeningStyle?: string;
   weeklyCommitment?: number;
   notificationsEnabled?: boolean;
+  notificationHour?: number;
 };
 
 const KEYS = {
@@ -63,6 +64,11 @@ export async function updateSession(id: string, partial: Partial<Session>): Prom
     sessions[idx] = { ...sessions[idx], ...partial };
     await AsyncStorage.setItem(KEYS.sessions, JSON.stringify(sessions));
   }
+}
+
+export async function deleteSession(id: string): Promise<void> {
+  const sessions = await getSessions();
+  await AsyncStorage.setItem(KEYS.sessions, JSON.stringify(sessions.filter((s) => s.id !== id)));
 }
 
 export async function updateProfile(partial: Partial<UserProfile>): Promise<void> {

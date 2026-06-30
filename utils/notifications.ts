@@ -25,9 +25,8 @@ export async function requestPermission(): Promise<boolean> {
   return status === 'granted';
 }
 
-export async function scheduleDailyReminder(): Promise<void> {
+export async function scheduleDailyReminder(hour = 20): Promise<void> {
   await ensureChannel();
-  // Cancel any existing to avoid duplicates
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   for (const n of scheduled) {
     if ((n.content.data as any)?.tag === 'daily-reminder') {
@@ -40,7 +39,7 @@ export async function scheduleDailyReminder(): Promise<void> {
       body: "You haven't had a session today. Put something on.",
       data: { tag: 'daily-reminder' },
     },
-    trigger: { hour: 20, minute: 0, repeats: true, type: Notifications.SchedulableTriggerInputTypes.DAILY },
+    trigger: { hour, minute: 0, repeats: true, type: Notifications.SchedulableTriggerInputTypes.DAILY },
   });
 }
 

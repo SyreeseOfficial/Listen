@@ -1,11 +1,15 @@
 import {
-  View, Text, StyleSheet, FlatList, Pressable, Dimensions, ScrollView, TextInput,
+  View, Text, StyleSheet, FlatList, Pressable, Dimensions, ScrollView, TextInput, Modal,
 } from 'react-native';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
+import { Swipeable } from 'react-native-gesture-handler';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import { useTheme } from '../../context/ThemeContext';
-import { getSessions, updateSession, type Session } from '../../utils/storage';
+import { getSessions, updateSession, deleteSession, type Session } from '../../utils/storage';
 import { formatDuration } from '../../utils/stats';
+import SessionShareCard from '../../components/SessionShareCard';
 
 const { height } = Dimensions.get('window');
 const STARS = [1, 2, 3, 4, 5];
@@ -71,6 +75,8 @@ export default function HistoryScreen() {
   const [editRating, setEditRating] = useState(0);
   const [editAlbum, setEditAlbum] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const [shareSession, setShareSession] = useState<Session | null>(null);
+  const shareCardRef = useRef<View>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -98,6 +104,20 @@ export default function HistoryScreen() {
       next.add(item.id);
       return next;
     });
+  }
+
+  async function handleDelete(id: string) {
+    await deleteSession(id);
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+  }
+
+  async function handleShare() {
+    if (!shareCardRef.current) return;
+    try {
+      const uri = await captureRef(shareCardRef, { format: 'png', quality: 1 });
+      await Sharing.shareAsync(uri, { mimeType: 'image/png' });
+    } catch (_) {}
+    setShareSession(null);
   }
 
   async function saveEdit(id: string) {
@@ -197,6 +217,14 @@ export default function HistoryScreen() {
           const isEditing = editingId === item.id;
 
           return (
+            <Swipeable
+              renderRightActions={() => (
+                <Pressable style={styles.deleteAction} onPress={() => handleDelete(item.id)}>
+                  <Text style={styles.deleteText}>Delete</Text>
+                </Pressable>
+              )}
+              overshootRight={false}
+            >
             <Pressable
               style={[styles.card, { backgroundColor: colors.card, borderColor: isEditing ? colors.accent : colors.border }]}
               onPress={() => toggleExpand(item.id)}
@@ -253,12 +281,17 @@ export default function HistoryScreen() {
                           <Text style={[styles.detailValue, { color: colors.text, flex: 1 }]}>{item.notes}</Text>
                         </View>
                       )}
-                      {/* Edit trigger */}
-                      <Pressable onPress={(e) => { startEdit(item); }}>
-                        <Text style={[styles.editTrigger, { color: colors.textSecondary }]}>
-                          {item.rating == null && !item.album && !item.notes ? 'Log this session →' : 'Edit →'}
-                        </Text>
-                      </Pressable>
+                      {/* Edit + Share triggers */}
+                      <View style={styles.detailActions}>
+                        <Pressable onPress={() => startEdit(item)}>
+                          <Text style={[styles.editTrigger, { color: colors.textSecondary }]}>
+                            {item.rating == null && !item.album && !item.notes ? 'Log this session →' : 'Edit →'}
+                          </Text>
+                        </Pressable>
+                        <Pressable onPress={() => setShareSession(item)}>
+                          <Text style={[styles.editTrigger, { color: colors.accent }]}>Share ↗</Text>
+                        </Pressable>
+                      </View>
                     </>
                   )}
 
@@ -317,9 +350,36 @@ export default function HistoryScreen() {
                 </View>
               )}
             </Pressable>
+            </Swipeable>
           );
         }}
       />
+      {/* Share modal */}
+      <Modal visible={shareSession != null} transparent animationType="slide" onRequestClose={() => setShareSession(null)}>
+        <Pressable style={styles.shareOverlay} onPress={() => setShareSession(null)} />
+        <View style={[styles.shareSheet, { backgroundColor: colors.card }]}>
+          <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+          <Text style={[styles.shareTitle, { color: colors.text }]}>Share session</Text>
+          <View style={styles.shareCardWrap}>
+            {shareSession && (
+              <SessionShareCard
+                ref={shareCardRef}
+                duration={shareSession.duration}
+                completedAt={shareSession.completedAt}
+                album={shareSession.album}
+                rating={shareSession.rating}
+                accent={colors.accent}
+              />
+            )}
+          </View>
+          <Pressable style={[styles.shareBtn, { backgroundColor: colors.accent }]} onPress={handleShare}>
+            <Text style={styles.shareBtnText}>Share →</Text>
+          </Pressable>
+          <Pressable onPress={() => setShareSession(null)}>
+            <Text style={[styles.shareCancel, { color: colors.textSecondary }]}>Cancel</Text>
+          </Pressable>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -373,6 +433,21 @@ const styles = StyleSheet.create({
   saveBtnText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
   cancelBtn: { borderWidth: 1.5, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 20 },
   cancelBtnText: { fontSize: 14, fontWeight: '500' },
+  detailActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  deleteAction: {
+    backgroundColor: '#C0392B', justifyContent: 'center', alignItems: 'center',
+    width: 80, borderRadius: 14, marginLeft: 8,
+  },
+  deleteText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
+  // Share modal
+  shareOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  shareSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40, gap: 16 },
+  modalHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center' },
+  shareTitle: { fontSize: 20, fontWeight: '600' },
+  shareCardWrap: { alignItems: 'center' },
+  shareBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  shareBtnText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  shareCancel: { textAlign: 'center', fontSize: 15, paddingVertical: 4 },
   // Empty states
   emptyFilter: { paddingTop: 48, alignItems: 'center' },
   emptyFilterText: { fontSize: 15 },

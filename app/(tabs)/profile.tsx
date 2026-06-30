@@ -8,6 +8,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { getProfile, updateProfile, getSessions } from '../../utils/storage';
 import { setHapticsEnabled } from '../../utils/haptics';
 import * as Haptics from '../../utils/haptics';
+import { scheduleDailyReminder } from '../../utils/notifications';
 import { computeStats } from '../../utils/stats';
 import {
   getLevelInfo, calcEquipmentXp, totalXp, checkAchievements, getNearMissAchievements,
@@ -47,6 +48,8 @@ export default function ProfileScreen() {
   const [hapticsOn, setHapticsOn] = useState(true);
   const [weekStart, setWeekStart] = useState<'monday' | 'sunday'>('monday');
   const [equipmentExpanded, setEquipmentExpanded] = useState(false);
+  const [notifHour, setNotifHour] = useState(20);
+  const [notifEnabled, setNotifEnabled] = useState(false);
   const [editGearIdx, setEditGearIdx] = useState<number | null>(null);
   const [editGearVal, setEditGearVal] = useState('');
 
@@ -74,6 +77,8 @@ export default function ProfileScreen() {
         setDefaultMins(p?.defaultSessionMinutes ?? 30);
         setHapticsOn(p?.hapticsEnabled ?? true);
         setWeekStart(p?.weekStartsOn ?? 'monday');
+        setNotifHour(p?.notificationHour ?? 20);
+        setNotifEnabled(p?.notificationsEnabled ?? false);
 
         if (p && s) {
           const stats = computeStats(s, p.streakShields ?? 0);
@@ -529,6 +534,35 @@ export default function ProfileScreen() {
               </Pressable>
             ))}
           </View>
+
+          {notifEnabled && (
+            <>
+              <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>DAILY REMINDER TIME</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 24 }} contentContainerStyle={{ gap: 8 }}>
+                {[7, 8, 12, 17, 18, 20, 21, 22].map((h) => {
+                  const label = h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`;
+                  const active = notifHour === h;
+                  return (
+                    <Pressable
+                      key={h}
+                      style={[styles.themeBtn, {
+                        borderColor: active ? colors.accent : colors.border,
+                        backgroundColor: active ? colors.accent : colors.background,
+                        paddingHorizontal: 14,
+                      }]}
+                      onPress={async () => {
+                        setNotifHour(h);
+                        await updateProfile({ notificationHour: h });
+                        await scheduleDailyReminder(h);
+                      }}
+                    >
+                      <Text style={{ color: active ? '#FFF' : colors.text, fontWeight: '500', fontSize: 14 }}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </>
+          )}
 
           <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>DANGER ZONE</Text>
           <Pressable style={[styles.dangerBtn, { borderColor: '#C0392B' }]} onPress={resetProgress}>
