@@ -221,6 +221,8 @@ export default function HomeScreen() {
               data={DURATIONS}
               keyExtractor={(item) => String(item)}
               showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              scrollEnabled
               snapToInterval={ITEM_HEIGHT}
               decelerationRate="fast"
               contentContainerStyle={{ paddingVertical: ITEM_HEIGHT * 2 }}
@@ -263,7 +265,7 @@ export default function HomeScreen() {
       {/* Insight cards */}
       {cards.length > 0 && (
         <>
-          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>WHAT'S ON</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>YOUR INSIGHTS</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}

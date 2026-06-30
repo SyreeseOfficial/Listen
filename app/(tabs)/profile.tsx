@@ -21,6 +21,7 @@ const { height, width } = Dimensions.get('window');
 const TILE = (width - 48 - 20) / 3;
 const CATEGORIES = ['Headphones', 'Earbuds', 'IEMs', 'DAC', 'Amp', 'Speaker', 'Other'];
 const DEFAULT_SHOW = 9;
+const DEFAULT_EQUIPMENT_SHOW = 5;
 
 const THEME_OPTIONS = [
   { label: 'Light', value: 'light' as const },
@@ -45,6 +46,9 @@ export default function ProfileScreen() {
   const [defaultMins, setDefaultMins] = useState(30);
   const [hapticsOn, setHapticsOn] = useState(true);
   const [weekStart, setWeekStart] = useState<'monday' | 'sunday'>('monday');
+  const [equipmentExpanded, setEquipmentExpanded] = useState(false);
+  const [editGearIdx, setEditGearIdx] = useState<number | null>(null);
+  const [editGearVal, setEditGearVal] = useState('');
 
   // Animated XP bar
   const animatedBar = useRef(new Animated.Value(0)).current;
@@ -134,6 +138,17 @@ export default function ProfileScreen() {
     const next = equipment.filter((g) => g !== item);
     await updateProfile({ equipment: next });
     setProfile((p: any) => ({ ...p, equipment: next }));
+  }
+
+  async function saveGearEdit() {
+    if (editGearIdx === null || !editGearVal.trim()) return;
+    const item = equipment[editGearIdx];
+    const cat = item.includes(': ') ? item.split(': ')[0] : 'Other';
+    const newItem = `${cat}: ${editGearVal.trim()}`;
+    const next = equipment.map((g, i) => (i === editGearIdx ? newItem : g));
+    await updateProfile({ equipment: next });
+    setProfile((p: any) => ({ ...p, equipment: next }));
+    setEditGearIdx(null);
   }
 
   async function saveName() {
@@ -246,22 +261,68 @@ export default function ProfileScreen() {
         </View>
 
         {equipment.length > 0 ? (
-          <View style={styles.gearList}>
-            {equipment.map((item, i) => {
-              const parts = item.includes(': ') ? item.split(': ') : ['Other', item];
-              return (
-                <View key={i} style={[styles.gearRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.gearCat, { color: colors.accent }]}>{parts[0]}</Text>
-                    <Text style={[styles.gearName, { color: colors.text }]}>{parts[1]}</Text>
+          <>
+            <View style={[styles.gearList, equipment.length > DEFAULT_EQUIPMENT_SHOW && { marginBottom: 10 }]}>
+              {(equipmentExpanded ? equipment : equipment.slice(0, DEFAULT_EQUIPMENT_SHOW)).map((item, i) => {
+                const parts = item.includes(': ') ? item.split(': ') : ['Other', item];
+                const isEditing = editGearIdx === i;
+                return (
+                  <View
+                    key={i}
+                    style={[styles.gearRow, {
+                      backgroundColor: colors.card,
+                      borderColor: isEditing ? colors.accent : colors.border,
+                    }]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.gearCat, { color: colors.accent }]}>{parts[0]}</Text>
+                      {isEditing ? (
+                        <TextInput
+                          style={[styles.gearEditInput, { color: colors.text, borderColor: colors.border }]}
+                          value={editGearVal}
+                          onChangeText={setEditGearVal}
+                          autoFocus
+                          returnKeyType="done"
+                          onSubmitEditing={saveGearEdit}
+                        />
+                      ) : (
+                        <Text style={[styles.gearName, { color: colors.text }]}>{parts[1]}</Text>
+                      )}
+                    </View>
+                    {isEditing ? (
+                      <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+                        <Pressable onPress={saveGearEdit} hitSlop={10}>
+                          <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '600' }}>Save</Text>
+                        </Pressable>
+                        <Pressable onPress={() => setEditGearIdx(null)} hitSlop={10}>
+                          <Text style={{ color: colors.textSecondary, fontSize: 20 }}>×</Text>
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+                        <Pressable onPress={() => { setEditGearIdx(i); setEditGearVal(parts[1]); }} hitSlop={10}>
+                          <Text style={{ color: colors.textSecondary, fontSize: 15 }}>✎</Text>
+                        </Pressable>
+                        <Pressable onPress={() => removeGear(item)} hitSlop={10}>
+                          <Text style={{ color: colors.textSecondary, fontSize: 22 }}>×</Text>
+                        </Pressable>
+                      </View>
+                    )}
                   </View>
-                  <Pressable onPress={() => removeGear(item)} hitSlop={10}>
-                    <Text style={{ color: colors.textSecondary, fontSize: 22 }}>×</Text>
-                  </Pressable>
-                </View>
-              );
-            })}
-          </View>
+                );
+              })}
+            </View>
+            {equipment.length > DEFAULT_EQUIPMENT_SHOW && (
+              <Pressable
+                style={[styles.expandBtn, { borderColor: colors.border }]}
+                onPress={() => setEquipmentExpanded((v) => !v)}
+              >
+                <Text style={[styles.expandBtnText, { color: colors.textSecondary }]}>
+                  {equipmentExpanded ? 'Show less ▲' : `View all ${equipment.length} items ▼`}
+                </Text>
+              </Pressable>
+            )}
+          </>
         ) : (
           <Text style={[styles.emptyGear, { color: colors.textSecondary }]}>
             No gear added yet. Add your headphones, DAC, or amp above.
@@ -520,6 +581,7 @@ const styles = StyleSheet.create({
   gearRow: { borderWidth: 1.5, borderRadius: 12, padding: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   gearCat: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
   gearName: { fontSize: 15, fontWeight: '500' },
+  gearEditInput: { fontSize: 15, borderBottomWidth: 1, paddingBottom: 3, marginTop: 2 },
   emptyGear: { fontSize: 14, marginBottom: 32, lineHeight: 20 },
   // Achievements
   achCount: { fontSize: 13, marginBottom: 16, marginTop: -4 },

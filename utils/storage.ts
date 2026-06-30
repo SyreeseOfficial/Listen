@@ -23,6 +23,12 @@ export type UserProfile = {
   defaultSessionMinutes?: number;
   hapticsEnabled?: boolean;
   weekStartsOn?: 'monday' | 'sunday';
+  listenerType?: string;
+  listeningGoal?: string;
+  listeningFrequency?: string;
+  listeningStyle?: string;
+  weeklyCommitment?: number;
+  notificationsEnabled?: boolean;
 };
 
 const KEYS = {

@@ -9,31 +9,24 @@ import { useTheme } from '../context/ThemeContext';
 import { saveSession } from '../utils/storage';
 import { formatCountdown } from '../utils/stats';
 
-const { height, width } = Dimensions.get('window');
-
 export default function SessionScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const { minutes, equipment } = useLocalSearchParams<{ minutes: string; equipment: string }>();
-  const totalSeconds = (parseInt(minutes ?? '30', 10)) * 60;
+  const totalSeconds = parseInt(minutes ?? '30', 10) * 60;
 
   const [remaining, setRemaining] = useState(totalSeconds);
   const [paused, setPaused] = useState(false);
   const [sessionId] = useState(() => Date.now().toString());
-  const startedAt = useRef(Date.now());
-  const pausedAt = useRef<number | null>(null);
-  const pausedTotal = useRef(0);
+  const effectiveTotalRef = useRef(totalSeconds);
+  const remainingRef = useRef(totalSeconds);
   const appState = useRef(AppState.currentState);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   KeepAwake.useKeepAwake();
 
-  // Pulse animation
   useEffect(() => {
-    if (paused) {
-      pulseAnim.setValue(1);
-      return;
-    }
+    if (paused) { pulseAnim.setValue(1); return; }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.04, duration: 2000, useNativeDriver: true }),
@@ -44,56 +37,53 @@ export default function SessionScreen() {
     return () => loop.stop();
   }, [paused]);
 
-  // Countdown tick
   useEffect(() => {
     if (paused) return;
     const interval = setInterval(() => {
       setRemaining((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
+          remainingRef.current = 0;
           finish(true);
           return 0;
         }
-        return prev - 1;
+        const next = prev - 1;
+        remainingRef.current = next;
+        return next;
       });
     }, 1000);
     return () => clearInterval(interval);
   }, [paused]);
 
-  // App state: background = keep running, closed/inactive = pause
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (nextState) => {
-      if (appState.current === 'active' && nextState !== 'active') {
-        // App closed/minimized heavily — pause
-        if (nextState === 'background') {
-          // Background = user switching apps, keep running
-          // We do nothing
-        }
-      }
-      if (nextState === 'active' && appState.current !== 'active') {
-        // Came back — if was paused via close, show resume prompt
-        if (pausedAt.current !== null) {
-          // already paused, prompt handled
-        }
-      }
-      appState.current = nextState;
-    });
-
+    const sub = AppState.addEventListener('change', (s) => { appState.current = s; });
     return () => sub.remove();
   }, []);
 
-  // On mount, check if there's a pending session (app killed mid-session)
-  // ponytail: skip for MVP — AppState 'background' keeps timer running, full kill loses state
+  function togglePause() {
+    Haptics.selectionAsync();
+    setPaused((p) => !p);
+  }
+
+  function adjustTime(delta: number) {
+    Haptics.selectionAsync();
+    setRemaining((prev) => {
+      const next = Math.max(60, prev + delta);
+      effectiveTotalRef.current = Math.max(60, effectiveTotalRef.current + (next - prev));
+      remainingRef.current = next;
+      return next;
+    });
+  }
 
   async function finish(completed: boolean) {
     Haptics.notificationAsync(
       completed ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning
     );
-    const elapsed = totalSeconds - remaining;
+    const elapsed = effectiveTotalRef.current - remainingRef.current;
     const equipmentUsed: string[] = equipment ? JSON.parse(equipment) : [];
     await saveSession({
       id: sessionId,
-      duration: elapsed > 0 ? elapsed : totalSeconds,
+      duration: elapsed > 0 ? elapsed : effectiveTotalRef.current,
       completedAt: new Date().toISOString(),
       completed,
       equipmentUsed,
@@ -115,7 +105,7 @@ export default function SessionScreen() {
     );
   }
 
-  const progress = 1 - remaining / totalSeconds;
+  const progress = Math.max(0, 1 - remaining / effectiveTotalRef.current);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -128,14 +118,28 @@ export default function SessionScreen() {
         <Text style={[styles.timerSub, { color: colors.textSecondary }]}>
           {paused ? 'paused' : 'listening'}
         </Text>
+        <View style={styles.adjustRow}>
+          <Pressable onPress={() => adjustTime(-300)} hitSlop={16}>
+            <Text style={[styles.adjustText, { color: colors.textSecondary }]}>−5 min</Text>
+          </Pressable>
+          <View style={[styles.adjustDot, { backgroundColor: colors.border }]} />
+          <Pressable onPress={() => adjustTime(300)} hitSlop={16}>
+            <Text style={[styles.adjustText, { color: colors.textSecondary }]}>+5 min</Text>
+          </Pressable>
+        </View>
       </Animated.View>
 
       <View style={styles.controls}>
         <Pressable
-          style={[styles.endBtn, { borderColor: colors.border }]}
-          onPress={handleEnd}
+          style={[styles.controlBtn, { borderColor: paused ? colors.accent : colors.border }]}
+          onPress={togglePause}
         >
-          <Text style={[styles.endBtnText, { color: colors.textSecondary }]}>End</Text>
+          <Text style={[styles.controlBtnText, { color: paused ? colors.accent : colors.text }]}>
+            {paused ? 'Resume' : 'Pause'}
+          </Text>
+        </Pressable>
+        <Pressable style={[styles.controlBtn, { borderColor: colors.border }]} onPress={handleEnd}>
+          <Text style={[styles.controlBtnText, { color: colors.textSecondary }]}>End</Text>
         </Pressable>
       </View>
     </View>
@@ -144,24 +148,15 @@ export default function SessionScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  progressBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    backgroundColor: 'transparent',
-  },
+  progressBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
   progressFill: { height: 3, borderRadius: 2 },
   timerSection: { alignItems: 'center', gap: 12 },
   timer: { fontSize: 80, fontWeight: '200', letterSpacing: -2, fontVariant: ['tabular-nums'] },
   timerSub: { fontSize: 14, fontWeight: '500', letterSpacing: 2, textTransform: 'uppercase' },
-  controls: { position: 'absolute', bottom: 64, alignItems: 'center' },
-  endBtn: {
-    borderWidth: 1.5,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-  },
-  endBtnText: { fontSize: 15, fontWeight: '500' },
+  adjustRow: { flexDirection: 'row', alignItems: 'center', gap: 18, marginTop: 4 },
+  adjustText: { fontSize: 13, fontWeight: '500' },
+  adjustDot: { width: 3, height: 3, borderRadius: 2 },
+  controls: { position: 'absolute', bottom: 64, flexDirection: 'row', gap: 12 },
+  controlBtn: { borderWidth: 1.5, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 28 },
+  controlBtnText: { fontSize: 15, fontWeight: '500' },
 });

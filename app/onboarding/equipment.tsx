@@ -35,8 +35,7 @@ export default function EquipmentScreen() {
     if (items.length > 0) {
       await updateProfile({ equipment: items.map((i) => `${i.category}: ${i.name}`) });
     }
-    await updateProfile({ onboardingDone: true });
-    router.replace('/(tabs)');
+    router.push('/onboarding/paywall');
   }
 
   return (
@@ -49,7 +48,6 @@ export default function EquipmentScreen() {
         contentContainerStyle={[styles.container]}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.step, { color: colors.textSecondary }]}>3 of 4</Text>
         <Text style={[styles.title, { color: colors.text }]}>Your gear</Text>
         <Text style={[styles.sub, { color: colors.textSecondary }]}>
           Add the equipment you listen with. Skip if you're not sure — you can add it later.
@@ -122,7 +120,6 @@ const styles = StyleSheet.create({
     paddingTop: height * 0.1,
     paddingBottom: 48,
   },
-  step: { fontSize: 13, fontWeight: '500', letterSpacing: 1, textTransform: 'uppercase' },
   title: { fontSize: 32, fontWeight: '600', letterSpacing: -0.5, marginTop: 8, marginBottom: 8 },
   sub: { fontSize: 15, lineHeight: 22, marginBottom: 28 },
   catRow: { marginBottom: 16 },

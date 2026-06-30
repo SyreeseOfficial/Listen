@@ -16,8 +16,13 @@ export default function ThemeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={styles.topNav}>
+        <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Text style={[styles.back, { color: colors.textSecondary }]}>←</Text>
+        </Pressable>
+      </View>
+
       <View style={styles.top}>
-        <Text style={[styles.step, { color: colors.textSecondary }]}>1 of 4</Text>
         <Text style={[styles.title, { color: colors.text }]}>Pick your look</Text>
         <Text style={[styles.sub, { color: colors.textSecondary }]}>You can change this anytime.</Text>
       </View>
@@ -44,7 +49,7 @@ export default function ThemeScreen() {
 
       <Pressable
         style={[styles.button, { backgroundColor: colors.accent }]}
-        onPress={() => router.push('/onboarding/name')}
+        onPress={() => router.push('/onboarding/equipment')}
       >
         <Text style={styles.buttonText}>Continue</Text>
       </Pressable>
@@ -56,13 +61,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 32,
-    paddingTop: height * 0.14,
+    paddingTop: height * 0.1,
     paddingBottom: 48,
     justifyContent: 'space-between',
   },
+  topNav: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  back: { fontSize: 24, fontWeight: '300' },
   top: { gap: 8 },
-  step: { fontSize: 13, fontWeight: '500', letterSpacing: 1, textTransform: 'uppercase' },
-  title: { fontSize: 32, fontWeight: '600', letterSpacing: -0.5, marginTop: 8 },
+  title: { fontSize: 32, fontWeight: '600', letterSpacing: -0.5 },
   sub: { fontSize: 15 },
   options: { gap: 12 },
   option: {

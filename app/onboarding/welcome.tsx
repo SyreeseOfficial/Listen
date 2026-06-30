@@ -24,7 +24,7 @@ export default function Welcome() {
       <View style={styles.bottom}>
         <Pressable
           style={[styles.button, { backgroundColor: colors.accent }]}
-          onPress={() => router.push('/onboarding/theme')}
+          onPress={() => router.push('/onboarding/listener-type')}
         >
           <Text style={styles.buttonText}>Get started</Text>
         </Pressable>

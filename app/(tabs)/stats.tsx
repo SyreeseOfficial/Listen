@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, ScrollView, Dimensions } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
-import { getSessions, getProfile, updateProfile } from '../../utils/storage';
+import { getSessions, getProfile, updateProfile, type Session } from '../../utils/storage';
 import { computeStats, formatDuration } from '../../utils/stats';
 import {
   computeArchetype, getEgoFuel, getMilestone,
@@ -12,6 +12,23 @@ import type { Archetype } from '../../utils/engagement';
 
 const { height } = Dimensions.get('window');
 const SEED_DAY = Math.floor(Date.now() / 86400000);
+const BAR_H = 72;
+
+function getWeekChart(sessions: Session[]) {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    const y = d.getFullYear(), mo = d.getMonth(), day = d.getDate();
+    const mins = sessions
+      .filter((s) => {
+        if (!s.completed) return false;
+        const sd = new Date(s.completedAt);
+        return sd.getFullYear() === y && sd.getMonth() === mo && sd.getDate() === day;
+      })
+      .reduce((sum, s) => sum + Math.floor(s.duration / 60), 0);
+    return { label: ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()], mins, isToday: i === 6 };
+  });
+}
 
 export default function StatsScreen() {
   const { colors } = useTheme();
@@ -27,11 +44,13 @@ export default function StatsScreen() {
   const [leaderboard, setLeaderboard] = useState<ReturnType<typeof getFakeLeaderboard>>([]);
   const [globalRank, setGlobalRank] = useState({ rank: 0, pct: 0 });
   const [userLevel, setUserLevel] = useState(1);
+  const [rawSessions, setRawSessions] = useState<Session[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       async function load() {
         const [sessions, profile] = await Promise.all([getSessions(), getProfile()]);
+        setRawSessions(sessions);
         const availableShields = profile?.streakShields ?? 0;
         const s = computeStats(sessions, availableShields);
         setStats(s);
@@ -123,6 +142,43 @@ export default function StatsScreen() {
           </View>
         ))}
       </View>
+
+      {/* 7-day chart */}
+      {(() => {
+        const chartData = getWeekChart(rawSessions);
+        const totalMins = chartData.reduce((s, d) => s + d.mins, 0);
+        if (totalMins === 0) return null;
+        const maxMins = Math.max(...chartData.map((d) => d.mins), 1);
+        return (
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.cardTag, { color: colors.accent }]}>THIS WEEK</Text>
+            <View style={styles.chartRow}>
+              {chartData.map(({ label, mins, isToday }, i) => (
+                <View key={i} style={styles.chartCol}>
+                  <View style={styles.chartBarArea}>
+                    <View
+                      style={[
+                        styles.chartBar,
+                        {
+                          height: mins > 0 ? Math.max(4, (mins / maxMins) * BAR_H) : 0,
+                          backgroundColor: colors.accent,
+                          opacity: isToday ? 1 : 0.4,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.chartLabel, { color: isToday ? colors.accent : colors.textSecondary, fontWeight: isToday ? '700' : '500' }]}>
+                    {label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            <Text style={[styles.chartFooter, { color: colors.textSecondary }]}>
+              {totalMins} min this week
+            </Text>
+          </View>
+        );
+      })()}
 
       {/* Fake leaderboard */}
       {leaderboard.length > 0 && (
@@ -225,4 +281,10 @@ const styles = StyleSheet.create({
   milestoneText: { fontSize: 14, fontWeight: '500' },
   streakBanner: { borderWidth: 1.5, borderRadius: 14, padding: 18, alignItems: 'center' },
   streakText: { fontSize: 15, fontWeight: '500' },
+  chartRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
+  chartCol: { flex: 1, alignItems: 'center', gap: 6 },
+  chartBarArea: { height: BAR_H, justifyContent: 'flex-end', width: '100%' },
+  chartBar: { borderRadius: 4, width: '100%' },
+  chartLabel: { fontSize: 11 },
+  chartFooter: { fontSize: 12, textAlign: 'center', marginTop: 2 },
 });
