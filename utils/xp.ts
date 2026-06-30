@@ -114,9 +114,10 @@ export function getAchievementProgress(
 
 export function getNearMissAchievements(
   sessions: Session[],
-  profile: UserProfile,
+  profile: UserProfile | null,
   stats: Stats
 ): Array<{ achievement: Achievement; progress: number }> {
+  if (!profile) return [];
   const unlocked = new Set(profile.achievements ?? []);
   return ACHIEVEMENTS
     .filter((a) => !unlocked.has(a.id) && !a.hidden)

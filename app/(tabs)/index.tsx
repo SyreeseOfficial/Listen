@@ -1,5 +1,5 @@
 import {
-  View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Dimensions,
+  View, Text, StyleSheet, Pressable, ScrollView, Alert, Dimensions,
 } from 'react-native';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -30,7 +30,7 @@ type InsightCard = {
 export default function HomeScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const pickerRef = useRef<FlatList>(null);
+  const pickerRef = useRef<ScrollView>(null);
   const [selectedMinutes, setSelectedMinutes] = useState(30);
   const [listenerCount, setListenerCount] = useState(getFakeListenerCount());
 
@@ -76,7 +76,7 @@ export default function HomeScreen() {
         // Scroll picker to default
         setSelectedMinutes(defaultMins);
         setTimeout(() => {
-          pickerRef.current?.scrollToIndex({ index: defaultMins - 1, animated: false });
+          pickerRef.current?.scrollTo({ y: (defaultMins - 1) * ITEM_HEIGHT, animated: false });
         }, 80);
 
         // Build insight cards using only local vars (no stale state)
@@ -215,27 +215,23 @@ export default function HomeScreen() {
           <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>SESSION LENGTH</Text>
           <View style={styles.pickerWrapper}>
             <View style={[styles.pickerHighlight, { borderColor: colors.border }]} />
-            <FlatList
+            <ScrollView
               ref={pickerRef}
               style={styles.pickerScroll}
-              data={DURATIONS}
-              keyExtractor={(item) => String(item)}
               showsVerticalScrollIndicator={false}
               nestedScrollEnabled
-              scrollEnabled
               snapToInterval={ITEM_HEIGHT}
               decelerationRate="fast"
               contentContainerStyle={{ paddingVertical: ITEM_HEIGHT * 2 }}
-              initialScrollIndex={selectedMinutes - 1}
-              getItemLayout={(_, index) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index })}
               onMomentumScrollEnd={(e) => {
                 const index = Math.round(e.nativeEvent.contentOffset.y / ITEM_HEIGHT);
                 const clamped = Math.max(0, Math.min(index, DURATIONS.length - 1));
                 setSelectedMinutes(DURATIONS[clamped]);
                 Haptics.selection();
               }}
-              renderItem={({ item: min }) => (
-                <View style={[styles.pickerItem, { height: ITEM_HEIGHT }]}>
+            >
+              {DURATIONS.map((min) => (
+                <View key={min} style={[styles.pickerItem, { height: ITEM_HEIGHT }]}>
                   <Text
                     style={[
                       styles.pickerItemText,
@@ -246,8 +242,8 @@ export default function HomeScreen() {
                     {formatDuration(min * 60)}
                   </Text>
                 </View>
-              )}
-            />
+              ))}
+            </ScrollView>
           </View>
         </View>
 
