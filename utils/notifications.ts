@@ -1,12 +1,11 @@
-// expo-notifications is not supported in Expo Go (SDK 53+).
-// All calls are wrapped in try/catch so the app doesn't crash in Go.
-// Everything works correctly in development builds and production.
+// expo-notifications is not fully supported in Expo Go (SDK 53+).
+// Static import so Metro can resolve the module; all API calls wrapped in
+// try/catch so the app doesn't crash at runtime in Expo Go.
+import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-let Notifications: typeof import('expo-notifications') | null = null;
 try {
-  Notifications = require('expo-notifications');
-  Notifications!.setNotificationHandler({
+  Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: false,
@@ -16,18 +15,16 @@ try {
 } catch (_) {}
 
 async function ensureChannel() {
-  if (Platform.OS === 'android' && Notifications) {
-    try {
-      await Notifications.setNotificationChannelAsync('listen-default', {
-        name: 'Listen',
-        importance: Notifications.AndroidImportance.DEFAULT,
-      });
-    } catch (_) {}
-  }
+  if (Platform.OS !== 'android') return;
+  try {
+    await Notifications.setNotificationChannelAsync('listen-default', {
+      name: 'Listen',
+      importance: Notifications.AndroidImportance.DEFAULT,
+    });
+  } catch (_) {}
 }
 
 export async function requestPermission(): Promise<boolean> {
-  if (!Notifications) return false;
   try {
     const { status: existing } = await Notifications.getPermissionsAsync();
     if (existing === 'granted') return true;
@@ -37,7 +34,6 @@ export async function requestPermission(): Promise<boolean> {
 }
 
 export async function scheduleDailyReminder(hour = 20): Promise<void> {
-  if (!Notifications) return;
   try {
     await ensureChannel();
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
@@ -58,7 +54,6 @@ export async function scheduleDailyReminder(hour = 20): Promise<void> {
 }
 
 export async function scheduleWeeklyRecap(): Promise<void> {
-  if (!Notifications) return;
   try {
     await ensureChannel();
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
@@ -79,7 +74,6 @@ export async function scheduleWeeklyRecap(): Promise<void> {
 }
 
 export async function cancelAllListenNotifications(): Promise<void> {
-  if (!Notifications) return;
   try {
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
     for (const n of scheduled) {
