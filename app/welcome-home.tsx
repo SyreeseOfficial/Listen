@@ -9,7 +9,7 @@ const { height } = Dimensions.get('window');
 
 const ARCHETYPES: Record<string, { emoji: string; tagline: string }> = {
   casual:     { emoji: '🌊', tagline: 'Let the music find you.' },
-  curious:    { emoji: '🔭', tagline: 'There's always more to hear.' },
+  curious:    { emoji: '🔭', tagline: "There's always more to hear." },
   dedicated:  { emoji: '🕯', tagline: 'Every session is a practice.' },
   audiophile: { emoji: '🎛', tagline: 'The details are everything.' },
 };
