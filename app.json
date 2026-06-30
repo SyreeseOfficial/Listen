@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Listen",
+    "slug": "listen",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FAFAF8",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.listen.app"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-system-ui"
+    ],
+    "scheme": "listen"
+  }
+}

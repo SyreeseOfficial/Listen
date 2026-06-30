@@ -1,0 +1,36 @@
+export const RANDOM_NAMES = [
+  'Vinyl Nomad',
+  'The Listener',
+  'Open Back',
+  'Warm Signal',
+  'Deep Bass',
+  'Planar Head',
+  'Silver Wire',
+  'High Fidelity',
+  'Static Free',
+  'Dynamic Range',
+  'Balanced Output',
+  'Low Noise Floor',
+  'The Audiophile',
+  'Analog Soul',
+  'Tube Roller',
+  'Midnight Session',
+  'Pure Signal',
+  'Quiet Hours',
+  'Warm Hum',
+  'The Disconnected',
+  'Crate Digger',
+  'Reference Grade',
+  'Flat Response',
+  'Bit Perfect',
+  'The Isolator',
+  'Deep Groove',
+  'Air & Bass',
+  'The Listener',
+  'Wide Stage',
+  'Still Water',
+];
+
+export function randomName(): string {
+  return RANDOM_NAMES[Math.floor(Math.random() * RANDOM_NAMES.length)];
+}

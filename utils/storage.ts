@@ -1,0 +1,66 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+export type Session = {
+  id: string;
+  duration: number; // seconds
+  completedAt: string; // ISO string
+  completed: boolean;
+  equipmentUsed?: string[];
+  rating?: number; // 1–5
+  album?: string;
+  notes?: string;
+};
+
+export type UserProfile = {
+  name: string;
+  theme: 'light' | 'dark' | 'system';
+  equipment: string[];
+  onboardingDone: boolean;
+  streakShields: number;
+  lastShieldStreak: number;
+  xp: number;
+  achievements: string[];
+  defaultSessionMinutes?: number;
+  hapticsEnabled?: boolean;
+  weekStartsOn?: 'monday' | 'sunday';
+};
+
+const KEYS = {
+  sessions: 'sessions',
+  profile: 'profile',
+} as const;
+
+export async function getSessions(): Promise<Session[]> {
+  const raw = await AsyncStorage.getItem(KEYS.sessions);
+  return raw ? JSON.parse(raw) : [];
+}
+
+export async function saveSession(session: Session): Promise<void> {
+  const sessions = await getSessions();
+  sessions.unshift(session);
+  await AsyncStorage.setItem(KEYS.sessions, JSON.stringify(sessions));
+}
+
+export async function getProfile(): Promise<UserProfile | null> {
+  const raw = await AsyncStorage.getItem(KEYS.profile);
+  return raw ? JSON.parse(raw) : null;
+}
+
+export async function saveProfile(profile: UserProfile): Promise<void> {
+  await AsyncStorage.setItem(KEYS.profile, JSON.stringify(profile));
+}
+
+export async function updateSession(id: string, partial: Partial<Session>): Promise<void> {
+  const sessions = await getSessions();
+  const idx = sessions.findIndex((s) => s.id === id);
+  if (idx !== -1) {
+    sessions[idx] = { ...sessions[idx], ...partial };
+    await AsyncStorage.setItem(KEYS.sessions, JSON.stringify(sessions));
+  }
+}
+
+export async function updateProfile(partial: Partial<UserProfile>): Promise<void> {
+  const existing = await getProfile();
+  const updated = { ...(existing ?? {}), ...partial } as UserProfile;
+  await saveProfile(updated);
+}

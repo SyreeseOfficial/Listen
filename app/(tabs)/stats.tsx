@@ -1,0 +1,228 @@
+import { View, Text, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useTheme } from '../../context/ThemeContext';
+import { getSessions, getProfile, updateProfile } from '../../utils/storage';
+import { computeStats, formatDuration } from '../../utils/stats';
+import {
+  computeArchetype, getEgoFuel, getMilestone,
+  getPhantomInsights, getFakeLeaderboard, getFakeGlobalRank,
+} from '../../utils/engagement';
+import type { Archetype } from '../../utils/engagement';
+
+const { height } = Dimensions.get('window');
+const SEED_DAY = Math.floor(Date.now() / 86400000);
+
+export default function StatsScreen() {
+  const { colors } = useTheme();
+  const [stats, setStats] = useState({
+    totalSeconds: 0, sessionsCompleted: 0, weekSeconds: 0,
+    currentStreak: 0, longestStreak: 0, avgSeconds: 0, shieldsConsumed: 0,
+  });
+  const [archetype, setArchetype] = useState<Archetype | null>(null);
+  const [egoFuel, setEgoFuel] = useState<string | null>(null);
+  const [milestone, setMilestone] = useState<string | null>(null);
+  const [shields, setShields] = useState(0);
+  const [phantomInsights, setPhantomInsights] = useState<string[] | null>(null);
+  const [leaderboard, setLeaderboard] = useState<ReturnType<typeof getFakeLeaderboard>>([]);
+  const [globalRank, setGlobalRank] = useState({ rank: 0, pct: 0 });
+  const [userLevel, setUserLevel] = useState(1);
+
+  useFocusEffect(
+    useCallback(() => {
+      async function load() {
+        const [sessions, profile] = await Promise.all([getSessions(), getProfile()]);
+        const availableShields = profile?.streakShields ?? 0;
+        const s = computeStats(sessions, availableShields);
+        setStats(s);
+        setArchetype(computeArchetype(sessions));
+        setEgoFuel(getEgoFuel(s));
+        setMilestone(getMilestone(s));
+        setPhantomInsights(getPhantomInsights(sessions));
+
+        const lvl = require('../../utils/xp').getLevelInfo(profile?.xp ?? 0).level;
+        setUserLevel(lvl);
+        setLeaderboard(getFakeLeaderboard(lvl, profile?.name ?? 'You'));
+        setGlobalRank(getFakeGlobalRank(SEED_DAY + lvl));
+
+        if (s.shieldsConsumed > 0) {
+          const remaining = Math.max(0, availableShields - s.shieldsConsumed);
+          setShields(remaining);
+          await updateProfile({ streakShields: remaining });
+        } else {
+          setShields(availableShields);
+        }
+      }
+      load();
+    }, [])
+  );
+
+  const tiles = [
+    { label: 'Total Time', value: formatDuration(stats.totalSeconds), sub: 'all time' },
+    { label: 'Sessions', value: String(stats.sessionsCompleted), sub: 'completed' },
+    { label: 'This Week', value: formatDuration(stats.weekSeconds), sub: 'last 7 days' },
+    { label: 'Streak', value: `${stats.currentStreak}`, sub: stats.currentStreak === 1 ? 'day' : 'days' },
+    { label: 'Average', value: formatDuration(stats.avgSeconds), sub: 'per session' },
+  ];
+
+  return (
+    <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={styles.container}>
+      <Text style={[styles.pageTitle, { color: colors.text }]}>Stats</Text>
+
+      {/* Phantom completion — "AI" insights after 15+ sessions */}
+      {phantomInsights && (
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.cardTag, { color: colors.accent }]}>YOUR LISTENING PROFILE</Text>
+          {phantomInsights.map((insight, i) => (
+            <View key={i} style={styles.insightRow}>
+              <Text style={[styles.insightDot, { color: colors.accent }]}>●</Text>
+              <Text style={[styles.insightText, { color: colors.text }]}>{insight}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Archetype */}
+      {archetype && (
+        <View style={[styles.archetypeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.archetypeIcon, { color: colors.accent }]}>{archetype.icon}</Text>
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={[styles.archetypeTitle, { color: colors.text }]}>{archetype.title}</Text>
+            <Text style={[styles.archetypeDesc, { color: colors.textSecondary }]}>{archetype.description}</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Ego fuel */}
+      {egoFuel && (
+        <View style={[styles.egoCard, { backgroundColor: colors.card, borderColor: colors.accent }]}>
+          <Text style={[styles.egoText, { color: colors.accent }]}>{egoFuel}</Text>
+        </View>
+      )}
+
+      {/* Shields */}
+      {shields > 0 && (
+        <View style={[styles.shieldRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
+          <Text style={{ fontSize: 16 }}>{'🛡'.repeat(Math.min(shields, 5))}</Text>
+          <Text style={[styles.shieldLabel, { color: colors.textSecondary }]}>
+            {shields} streak shield{shields !== 1 ? 's' : ''} available
+          </Text>
+        </View>
+      )}
+
+      {/* Stats grid */}
+      <View style={styles.grid}>
+        {tiles.map((tile, i) => (
+          <View
+            key={tile.label}
+            style={[styles.tile, { backgroundColor: colors.card, borderColor: colors.border }, i === 0 && styles.tileWide]}
+          >
+            <Text style={[styles.tileLabel, { color: colors.textSecondary }]}>{tile.label}</Text>
+            <Text style={[styles.tileValue, { color: colors.text }]}>{tile.value}</Text>
+            <Text style={[styles.tileSub, { color: colors.textSecondary }]}>{tile.sub}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Fake leaderboard */}
+      {leaderboard.length > 0 && (
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.cardTag, { color: colors.accent }]}>TOP LISTENERS THIS WEEK</Text>
+          {leaderboard.map((entry, i) => (
+            <View
+              key={i}
+              style={[
+                styles.lbRow,
+                entry.isUser && { backgroundColor: colors.accent + '18', borderRadius: 8 },
+              ]}
+            >
+              <Text style={[styles.lbRank, { color: entry.isUser ? colors.accent : colors.textSecondary }]}>
+                {i + 1}
+              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.lbName, { color: entry.isUser ? colors.accent : colors.text }]}>
+                  {entry.isUser ? 'You' : entry.name}{entry.city ? ` · ${entry.city}` : ''}
+                </Text>
+                <View style={[styles.lbBarTrack, { backgroundColor: colors.border }]}>
+                  <View
+                    style={[
+                      styles.lbBarFill,
+                      {
+                        backgroundColor: entry.isUser ? colors.accent : colors.textSecondary,
+                        width: `${entry.barWidth * 100}%`,
+                        opacity: entry.isUser ? 1 : 0.5,
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+              <Text style={[styles.lbLevel, { color: entry.isUser ? colors.accent : colors.textSecondary }]}>
+                Lv.{entry.level}
+              </Text>
+            </View>
+          ))}
+          <Text style={[styles.lbFooter, { color: colors.textSecondary }]}>
+            You rank #{globalRank.rank} globally · Top {globalRank.pct}% of listeners
+          </Text>
+        </View>
+      )}
+
+      {/* Milestone */}
+      {milestone && (
+        <View style={[styles.milestoneCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.milestoneText, { color: colors.text }]}>↑ {milestone}</Text>
+        </View>
+      )}
+
+      {/* Streak banner */}
+      {stats.currentStreak >= 3 && (
+        <View style={[styles.streakBanner, { backgroundColor: colors.card, borderColor: colors.accent }]}>
+          <Text style={[styles.streakText, { color: colors.accent }]}>
+            🔥 {stats.currentStreak} day streak — keep it going
+          </Text>
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { paddingHorizontal: 24, paddingTop: height * 0.09, paddingBottom: 48, gap: 12 },
+  pageTitle: { fontSize: 32, fontWeight: '600', marginBottom: 4 },
+  card: { borderWidth: 1.5, borderRadius: 16, padding: 18, gap: 10 },
+  cardTag: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase' },
+  insightRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  insightDot: { fontSize: 8, marginTop: 5 },
+  insightText: { flex: 1, fontSize: 14, lineHeight: 20 },
+  archetypeCard: {
+    borderWidth: 1.5, borderRadius: 16, padding: 18,
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+  },
+  archetypeIcon: { fontSize: 36 },
+  archetypeTitle: { fontSize: 18, fontWeight: '600' },
+  archetypeDesc: { fontSize: 13, lineHeight: 19 },
+  egoCard: { borderWidth: 1.5, borderRadius: 14, padding: 16 },
+  egoText: { fontSize: 14, fontWeight: '500', textAlign: 'center' },
+  shieldRow: {
+    borderWidth: 1.5, borderRadius: 14, padding: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+  },
+  shieldLabel: { fontSize: 14 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  tile: { width: '47%', borderWidth: 1.5, borderRadius: 16, padding: 20, gap: 4 },
+  tileWide: { width: '100%' },
+  tileLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase' },
+  tileValue: { fontSize: 36, fontWeight: '600', letterSpacing: -1 },
+  tileSub: { fontSize: 13 },
+  lbRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, paddingHorizontal: 4 },
+  lbRank: { fontSize: 13, fontWeight: '700', width: 20, textAlign: 'center' },
+  lbName: { fontSize: 13, fontWeight: '500', marginBottom: 4 },
+  lbBarTrack: { height: 3, borderRadius: 2, overflow: 'hidden' },
+  lbBarFill: { height: 3, borderRadius: 2 },
+  lbLevel: { fontSize: 12, fontWeight: '600', width: 36, textAlign: 'right' },
+  lbFooter: { fontSize: 12, textAlign: 'center', marginTop: 4 },
+  milestoneCard: { borderWidth: 1.5, borderRadius: 14, padding: 16 },
+  milestoneText: { fontSize: 14, fontWeight: '500' },
+  streakBanner: { borderWidth: 1.5, borderRadius: 14, padding: 18, alignItems: 'center' },
+  streakText: { fontSize: 15, fontWeight: '500' },
+});
