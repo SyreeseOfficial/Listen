@@ -74,6 +74,9 @@ export default function CompleteScreen() {
         achievements: [...(profile?.achievements ?? []), ...newAchievements.map((a) => a.id)],
       });
 
+      if (newAchievements.length > 0) Haptics.heavy();
+      if (leveledUp) setTimeout(() => Haptics.notification(), 400);
+
       setToastXp(earned + achXp);
       setToastLabel(newAchievements.length > 0 ? `+${newAchievements.length} achievement${newAchievements.length > 1 ? 's' : ''}` : 'Session complete');
       setToastLevelUp(leveledUp ? newLevel.title : null);

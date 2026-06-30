@@ -17,3 +17,7 @@ export function selection() {
 export function notification(type = Expo.NotificationFeedbackType.Success) {
   if (_enabled) Expo.notificationAsync(type);
 }
+
+export function heavy() {
+  if (_enabled) Expo.impactAsync(Expo.ImpactFeedbackStyle.Heavy);
+}

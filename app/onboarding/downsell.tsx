@@ -18,7 +18,7 @@ export default function DownsellScreen() {
 
   async function finish() {
     await updateProfile({ onboardingDone: true });
-    router.replace('/(tabs)');
+    router.replace('/welcome-home');
   }
 
   return (

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
@@ -13,6 +13,7 @@ import type { Archetype } from '../../utils/engagement';
 const { height } = Dimensions.get('window');
 const SEED_DAY = Math.floor(Date.now() / 86400000);
 const BAR_H = 72;
+type Period = 'week' | 'month' | 'all';
 
 function getWeekChart(sessions: Session[]) {
   return Array.from({ length: 7 }, (_, i) => {
@@ -30,6 +31,53 @@ function getWeekChart(sessions: Session[]) {
   });
 }
 
+function getMonthChart(sessions: Session[]) {
+  return Array.from({ length: 4 }, (_, i) => {
+    const now = Date.now();
+    const weekEndMs = now - (3 - i) * 7 * 86400000;
+    const weekStartMs = weekEndMs - 7 * 86400000;
+    const mins = sessions
+      .filter((s) => {
+        if (!s.completed) return false;
+        const t = new Date(s.completedAt).getTime();
+        return t >= weekStartMs && t < weekEndMs;
+      })
+      .reduce((sum, s) => sum + Math.floor(s.duration / 60), 0);
+    return { label: `W${i + 1}`, mins, isToday: i === 3 };
+  });
+}
+
+function getAllTimeChart(sessions: Session[]) {
+  const MONTH_LABELS = 'JFMAMJJASOND';
+  return Array.from({ length: 6 }, (_, i) => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - (5 - i));
+    const y = d.getFullYear(), mo = d.getMonth();
+    const mins = sessions
+      .filter((s) => {
+        if (!s.completed) return false;
+        const sd = new Date(s.completedAt);
+        return sd.getFullYear() === y && sd.getMonth() === mo;
+      })
+      .reduce((sum, s) => sum + Math.floor(s.duration / 60), 0);
+    return { label: MONTH_LABELS[mo], mins, isToday: i === 5 };
+  });
+}
+
+function getChartData(sessions: Session[], period: Period) {
+  if (period === 'month') return getMonthChart(sessions);
+  if (period === 'all') return getAllTimeChart(sessions);
+  return getWeekChart(sessions);
+}
+
+function getChartFooter(chartData: { mins: number }[], period: Period): string {
+  const total = chartData.reduce((s, d) => s + d.mins, 0);
+  if (period === 'week') return `${total} min this week`;
+  if (period === 'month') return `${total} min this month`;
+  return `${total} min over 6 months`;
+}
+
 export default function StatsScreen() {
   const { colors } = useTheme();
   const [stats, setStats] = useState({
@@ -45,6 +93,7 @@ export default function StatsScreen() {
   const [globalRank, setGlobalRank] = useState({ rank: 0, pct: 0 });
   const [userLevel, setUserLevel] = useState(1);
   const [rawSessions, setRawSessions] = useState<Session[]>([]);
+  const [period, setPeriod] = useState<Period>('week');
 
   useFocusEffect(
     useCallback(() => {
@@ -120,14 +169,21 @@ export default function StatsScreen() {
       )}
 
       {/* Shields */}
-      {shields > 0 && (
-        <View style={[styles.shieldRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
-          <Text style={{ fontSize: 16 }}>{'🛡'.repeat(Math.min(shields, 5))}</Text>
-          <Text style={[styles.shieldLabel, { color: colors.textSecondary }]}>
-            {shields} streak shield{shields !== 1 ? 's' : ''} available
+      <View style={[styles.shieldRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
+        <View style={styles.shieldSlots}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Text key={i} style={[styles.shieldIcon, { opacity: i < shields ? 1 : 0.2 }]}>🛡</Text>
+          ))}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.shieldLabel, { color: colors.text }]}>
+            {shields > 0 ? `${shields} streak shield${shields !== 1 ? 's' : ''}` : 'No shields'}
+          </Text>
+          <Text style={[styles.shieldSub, { color: colors.textSecondary }]}>
+            Earn 1 every 4-day streak. Protects against a missed day.
           </Text>
         </View>
-      )}
+      </View>
 
       {/* Stats grid */}
       <View style={styles.grid}>
@@ -143,39 +199,55 @@ export default function StatsScreen() {
         ))}
       </View>
 
-      {/* 7-day chart */}
-      {(() => {
-        const chartData = getWeekChart(rawSessions);
+      {/* Chart with period toggle */}
+      {stats.totalSeconds > 0 && (() => {
+        const chartData = getChartData(rawSessions, period);
         const totalMins = chartData.reduce((s, d) => s + d.mins, 0);
-        if (totalMins === 0) return null;
         const maxMins = Math.max(...chartData.map((d) => d.mins), 1);
         return (
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.cardTag, { color: colors.accent }]}>THIS WEEK</Text>
-            <View style={styles.chartRow}>
-              {chartData.map(({ label, mins, isToday }, i) => (
-                <View key={i} style={styles.chartCol}>
-                  <View style={styles.chartBarArea}>
-                    <View
-                      style={[
-                        styles.chartBar,
-                        {
-                          height: mins > 0 ? Math.max(4, (mins / maxMins) * BAR_H) : 0,
-                          backgroundColor: colors.accent,
-                          opacity: isToday ? 1 : 0.4,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={[styles.chartLabel, { color: isToday ? colors.accent : colors.textSecondary, fontWeight: isToday ? '700' : '500' }]}>
-                    {label}
+            <View style={styles.periodRow}>
+              {(['week', 'month', 'all'] as Period[]).map((p) => (
+                <Pressable key={p} onPress={() => setPeriod(p)} style={styles.periodBtn}>
+                  <Text style={[styles.periodBtnText, {
+                    color: period === p ? colors.accent : colors.textSecondary,
+                    fontWeight: period === p ? '600' : '400',
+                  }]}>
+                    {p === 'week' ? 'Week' : p === 'month' ? 'Month' : 'All Time'}
                   </Text>
-                </View>
+                </Pressable>
               ))}
             </View>
-            <Text style={[styles.chartFooter, { color: colors.textSecondary }]}>
-              {totalMins} min this week
-            </Text>
+            {totalMins === 0 ? (
+              <Text style={[styles.chartEmpty, { color: colors.textSecondary }]}>No sessions in this period</Text>
+            ) : (
+              <>
+                <View style={styles.chartRow}>
+                  {chartData.map(({ label, mins, isToday }, i) => (
+                    <View key={i} style={styles.chartCol}>
+                      <View style={styles.chartBarArea}>
+                        <View
+                          style={[
+                            styles.chartBar,
+                            {
+                              height: mins > 0 ? Math.max(4, (mins / maxMins) * BAR_H) : 0,
+                              backgroundColor: colors.accent,
+                              opacity: isToday ? 1 : 0.4,
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text style={[styles.chartLabel, { color: isToday ? colors.accent : colors.textSecondary, fontWeight: isToday ? '700' : '500' }]}>
+                        {label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={[styles.chartFooter, { color: colors.textSecondary }]}>
+                  {getChartFooter(chartData, period)}
+                </Text>
+              </>
+            )}
           </View>
         );
       })()}
@@ -263,7 +335,14 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderRadius: 14, padding: 14,
     flexDirection: 'row', alignItems: 'center', gap: 12,
   },
-  shieldLabel: { fontSize: 14 },
+  shieldSlots: { flexDirection: 'row', gap: 4 },
+  shieldIcon: { fontSize: 18 },
+  shieldLabel: { fontSize: 14, fontWeight: '500', marginBottom: 2 },
+  shieldSub: { fontSize: 12, lineHeight: 16 },
+  periodRow: { flexDirection: 'row', gap: 16, marginBottom: 4 },
+  periodBtn: { paddingVertical: 2 },
+  periodBtnText: { fontSize: 13 },
+  chartEmpty: { fontSize: 14, textAlign: 'center', paddingVertical: 20 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   tile: { width: '47%', borderWidth: 1.5, borderRadius: 16, padding: 20, gap: 4 },
   tileWide: { width: '100%' },

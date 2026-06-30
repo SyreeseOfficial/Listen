@@ -64,6 +64,7 @@ export default function HistoryScreen() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sortIdx, setSortIdx] = useState(0);
+  const [search, setSearch] = useState('');
 
   // Edit state — one session at a time
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -111,7 +112,9 @@ export default function HistoryScreen() {
   }
 
   const currentSort = SORTS[sortIdx];
-  const displaySessions = applySort(applyFilter(sessions, filter), currentSort.key);
+  const q = search.trim().toLowerCase();
+  const displaySessions = applySort(applyFilter(sessions, filter), currentSort.key)
+    .filter((s) => !q || (s.album ?? '').toLowerCase().includes(q) || (s.notes ?? '').toLowerCase().includes(q));
 
   if (sessions.length === 0) {
     return (
@@ -137,6 +140,20 @@ export default function HistoryScreen() {
           <Text style={[styles.sortPillText, { color: colors.textSecondary }]}>{currentSort.label}</Text>
           <Text style={[styles.sortPillArrow, { color: colors.accent }]}>↕</Text>
         </Pressable>
+      </View>
+
+      {/* Search */}
+      <View style={[styles.searchRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.searchIcon, { color: colors.textSecondary }]}>⌕</Text>
+        <TextInput
+          style={[styles.searchInput, { color: colors.text }]}
+          placeholder="Search albums, notes…"
+          placeholderTextColor={colors.textSecondary}
+          value={search}
+          onChangeText={setSearch}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
       </View>
 
       {/* Filter chips */}
@@ -317,6 +334,13 @@ const styles = StyleSheet.create({
   },
   sortPillText: { fontSize: 13, fontWeight: '500' },
   sortPillArrow: { fontSize: 13, fontWeight: '700' },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
+    marginBottom: 12,
+  },
+  searchIcon: { fontSize: 18 },
+  searchInput: { flex: 1, fontSize: 15 },
   filterRow: { flexGrow: 0, marginHorizontal: -24, marginBottom: 16 },
   filterContent: { paddingHorizontal: 24, gap: 8 },
   filterChip: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 7 },

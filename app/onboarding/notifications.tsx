@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
 import { updateProfile } from '../../utils/storage';
+import { requestPermission, scheduleDailyReminder, scheduleWeeklyRecap } from '../../utils/notifications';
 
 const { height } = Dimensions.get('window');
 
@@ -11,6 +12,13 @@ export default function NotificationsScreen() {
 
   async function respond(enabled: boolean) {
     await updateProfile({ notificationsEnabled: enabled });
+    if (enabled) {
+      const granted = await requestPermission();
+      if (granted) {
+        await scheduleDailyReminder();
+        await scheduleWeeklyRecap();
+      }
+    }
     router.push('/onboarding/theme');
   }
 
