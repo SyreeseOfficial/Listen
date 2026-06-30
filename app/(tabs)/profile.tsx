@@ -677,19 +677,18 @@ export default function ProfileScreen() {
             />
           </View>
 
-          {isPremiumUser && (
-            <>
-              <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>DATA</Text>
-              <Pressable
-                style={[styles.dangerBtn, { borderColor: colors.border }]}
-                onPress={async () => {
-                  try { await exportHistory(); } catch (_) {}
-                }}
-              >
-                <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>Export History as CSV</Text>
-              </Pressable>
-            </>
-          )}
+          <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>DATA</Text>
+          <Pressable
+            style={[styles.dangerBtn, { borderColor: isPremiumUser ? colors.border : colors.border, opacity: isPremiumUser ? 1 : 0.4 }]}
+            onPress={async () => {
+              if (!isPremiumUser) { router.push('/paywall'); return; }
+              try { await exportHistory(); } catch (_) {}
+            }}
+          >
+            <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>
+              {isPremiumUser ? 'Export History as CSV' : '🔒 Export History as CSV'}
+            </Text>
+          </Pressable>
 
           <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>DANGER ZONE</Text>
           <Pressable style={[styles.dangerBtn, { borderColor: '#C0392B' }]} onPress={resetProgress}>
@@ -715,6 +714,21 @@ export default function ProfileScreen() {
                 {"Recent  —  History search, monthly & all-time stats, push notifications, weekly recap, streak shields, session sharing, custom notification time, auto-complete toggle, expandable About"}
               </Text>
             </View>
+          )}
+
+          {__DEV__ && (
+            <Pressable
+              style={[styles.dangerBtn, { borderColor: colors.border, marginTop: 8 }]}
+              onPress={async () => {
+                const next = !isPremiumUser;
+                setIsPremiumUser(next);
+                await updateProfile({ isPremium: next });
+              }}
+            >
+              <Text style={{ color: colors.textSecondary, fontWeight: '600', fontSize: 13 }}>
+                DEV: {isPremiumUser ? 'Switch to Free' : 'Switch to Pro'}
+              </Text>
+            </Pressable>
           )}
 
           <Pressable onPress={() => setSettingsVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
