@@ -3,7 +3,6 @@ import {
 } from 'react-native';
 import { useState, useCallback, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { Swipeable } from 'react-native-gesture-handler';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '../../context/ThemeContext';
@@ -217,14 +216,6 @@ export default function HistoryScreen() {
           const isEditing = editingId === item.id;
 
           return (
-            <Swipeable
-              renderRightActions={() => (
-                <Pressable style={styles.deleteAction} onPress={() => handleDelete(item.id)}>
-                  <Text style={styles.deleteText}>Delete</Text>
-                </Pressable>
-              )}
-              overshootRight={false}
-            >
             <Pressable
               style={[styles.card, { backgroundColor: colors.card, borderColor: isEditing ? colors.accent : colors.border }]}
               onPress={() => toggleExpand(item.id)}
@@ -281,15 +272,18 @@ export default function HistoryScreen() {
                           <Text style={[styles.detailValue, { color: colors.text, flex: 1 }]}>{item.notes}</Text>
                         </View>
                       )}
-                      {/* Edit + Share triggers */}
+                      {/* Edit + Share + Delete */}
                       <View style={styles.detailActions}>
                         <Pressable onPress={() => startEdit(item)}>
                           <Text style={[styles.editTrigger, { color: colors.textSecondary }]}>
-                            {item.rating == null && !item.album && !item.notes ? 'Log this session →' : 'Edit →'}
+                            {item.rating == null && !item.album && !item.notes ? 'Log →' : 'Edit →'}
                           </Text>
                         </Pressable>
                         <Pressable onPress={() => setShareSession(item)}>
                           <Text style={[styles.editTrigger, { color: colors.accent }]}>Share ↗</Text>
+                        </Pressable>
+                        <Pressable onPress={() => handleDelete(item.id)}>
+                          <Text style={[styles.editTrigger, { color: '#C0392B' }]}>Delete</Text>
                         </Pressable>
                       </View>
                     </>
@@ -350,7 +344,6 @@ export default function HistoryScreen() {
                 </View>
               )}
             </Pressable>
-            </Swipeable>
           );
         }}
       />
@@ -434,11 +427,6 @@ const styles = StyleSheet.create({
   cancelBtn: { borderWidth: 1.5, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 20 },
   cancelBtnText: { fontSize: 14, fontWeight: '500' },
   detailActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
-  deleteAction: {
-    backgroundColor: '#C0392B', justifyContent: 'center', alignItems: 'center',
-    width: 80, borderRadius: 14, marginLeft: 8,
-  },
-  deleteText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
   // Share modal
   shareOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   shareSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40, gap: 16 },
