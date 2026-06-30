@@ -3,12 +3,12 @@ import {
   Dimensions, KeyboardAvoidingView, Platform, Alert, Modal, Animated, Switch,
 } from 'react-native';
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
 import { getProfile, updateProfile, getSessions } from '../../utils/storage';
 import { setHapticsEnabled } from '../../utils/haptics';
 import * as Haptics from '../../utils/haptics';
-import { scheduleDailyReminder } from '../../utils/notifications';
+import { scheduleDailyReminder, scheduleWeeklyRecap, cancelAllListenNotifications } from '../../utils/notifications';
 import { computeStats } from '../../utils/stats';
 import {
   getLevelInfo, calcEquipmentXp, totalXp, checkAchievements, getNearMissAchievements,
@@ -50,7 +50,11 @@ export default function ProfileScreen() {
   const [equipmentExpanded, setEquipmentExpanded] = useState(false);
   const [notifHour, setNotifHour] = useState(20);
   const [notifEnabled, setNotifEnabled] = useState(false);
+  const [autoCompleteOn, setAutoCompleteOn] = useState(true);
+  const [aboutExpanded, setAboutExpanded] = useState(false);
+  const [isPremiumUser, setIsPremiumUser] = useState(false);
   const [editGearIdx, setEditGearIdx] = useState<number | null>(null);
+  const router = useRouter();
   const [editGearVal, setEditGearVal] = useState('');
 
   // Animated XP bar
@@ -79,6 +83,8 @@ export default function ProfileScreen() {
         setWeekStart(p?.weekStartsOn ?? 'monday');
         setNotifHour(p?.notificationHour ?? 20);
         setNotifEnabled(p?.notificationsEnabled ?? false);
+        setAutoCompleteOn(p?.autoComplete ?? true);
+        setIsPremiumUser(p?.isPremium ?? false);
 
         if (p && s) {
           const stats = computeStats(s, p.streakShields ?? 0);
@@ -116,9 +122,15 @@ export default function ProfileScreen() {
   const equipment: string[] = profile?.equipment ?? [];
   const unlockedSet = new Set<string>(profile?.achievements ?? []);
   const visibleAch = achExpanded ? ACHIEVEMENTS : ACHIEVEMENTS.slice(0, DEFAULT_SHOW);
+  const isLevelCapped = !isPremiumUser && levelInfo.level >= 4;
+  const displayLevel = isLevelCapped ? 3 : levelInfo.level;
 
   async function addGear() {
     if (!inputValue.trim()) return;
+    if (!isPremiumUser && equipment.length >= 3) {
+      router.push('/paywall');
+      return;
+    }
     Haptics.impact();
     const item = `${category}: ${inputValue.trim()}`;
     const next = [...equipment, item];
@@ -193,14 +205,21 @@ export default function ProfileScreen() {
         <View style={[styles.levelCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.levelHeader}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.levelLabel, { color: colors.textSecondary }]}>LEVEL {levelInfo.level}</Text>
-              <Text style={[styles.levelTitle, { color: colors.text }]}>{levelInfo.title}</Text>
+              <Text style={[styles.levelLabel, { color: colors.textSecondary }]}>LEVEL {displayLevel}{isLevelCapped ? ' 🔒' : ''}</Text>
+              <Text style={[styles.levelTitle, { color: colors.text }]}>{isLevelCapped ? 'Level Cap Reached' : levelInfo.title}</Text>
               {profile?.name ? <Text style={[styles.profileName, { color: colors.textSecondary }]}>{profile.name}</Text> : null}
+              {isLevelCapped && (
+                <Pressable onPress={() => router.push('/paywall')} hitSlop={8}>
+                  <Text style={[styles.profileName, { color: colors.accent }]}>Unlock Level 4+ →</Text>
+                </Pressable>
+              )}
             </View>
             <View style={styles.levelRight}>
-              <Text style={[styles.levelBadge, { color: colors.accent, borderColor: colors.accent }]}>
-                {levelInfo.level}
-              </Text>
+              <Pressable onPress={() => isLevelCapped && router.push('/paywall')} disabled={!isLevelCapped}>
+                <Text style={[styles.levelBadge, { color: colors.accent, borderColor: colors.accent }]}>
+                  {isLevelCapped ? '🔒' : levelInfo.level}
+                </Text>
+              </Pressable>
               <Pressable onPress={() => setSettingsVisible(true)} hitSlop={10}>
                 <Text style={[styles.settingsIcon, { color: colors.textSecondary }]}>⚙</Text>
               </Pressable>
@@ -264,6 +283,12 @@ export default function ProfileScreen() {
             <Text style={styles.addBtnText}>Add</Text>
           </Pressable>
         </View>
+
+        {!isPremiumUser && equipment.length >= 3 && (
+          <Pressable onPress={() => router.push('/paywall')} hitSlop={8} style={{ marginBottom: 12, marginTop: -4 }}>
+            <Text style={{ color: colors.accent, fontSize: 13 }}>🔒 Gear limit reached — upgrade for unlimited →</Text>
+          </Pressable>
+        )}
 
         {equipment.length > 0 ? (
           <>
@@ -443,7 +468,18 @@ export default function ProfileScreen() {
         <Pressable style={styles.modalOverlay} onPress={() => setSettingsVisible(false)} />
         <View style={[styles.modalSheet, { backgroundColor: colors.card }]}>
           <View style={[styles.modalHandle, { backgroundColor: colors.border }]} />
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
           <Text style={[styles.modalTitle, { color: colors.text }]}>Settings</Text>
+
+          {!isPremiumUser && (
+            <Pressable
+              style={[styles.upgradeRow, { backgroundColor: colors.accent + '18', borderColor: colors.accent }]}
+              onPress={() => { setSettingsVisible(false); router.push('/paywall'); }}
+            >
+              <Text style={[styles.upgradeRowText, { color: colors.accent }]}>✦ Upgrade to Listen Pro — $7.99</Text>
+              <Text style={[styles.upgradeRowArrow, { color: colors.accent }]}>→</Text>
+            </Pressable>
+          )}
 
           <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>DISPLAY NAME</Text>
           <View style={styles.nameRow}>
@@ -517,6 +553,25 @@ export default function ProfileScreen() {
             />
           </View>
 
+          <View style={styles.toggleRow}>
+            <Text style={[styles.toggleLabel, { color: colors.text }]}>Notifications</Text>
+            <Switch
+              value={notifEnabled}
+              onValueChange={async (v) => {
+                setNotifEnabled(v);
+                await updateProfile({ notificationsEnabled: v });
+                if (v) {
+                  await scheduleDailyReminder(notifHour);
+                  await scheduleWeeklyRecap();
+                } else {
+                  await cancelAllListenNotifications();
+                }
+              }}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor="#FFF"
+            />
+          </View>
+
           <Text style={[styles.settingLabel, { color: colors.textSecondary, marginTop: 4 }]}>WEEK STARTS ON</Text>
           <View style={styles.weekRow}>
             {(['monday', 'sunday'] as const).map((d) => (
@@ -537,7 +592,9 @@ export default function ProfileScreen() {
 
           {notifEnabled && (
             <>
-              <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>DAILY REMINDER TIME</Text>
+              <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>
+                {isPremiumUser ? 'DAILY REMINDER TIME' : 'DAILY REMINDER TIME 🔒 PRO'}
+              </Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 24 }} contentContainerStyle={{ gap: 8 }}>
                 {[7, 8, 12, 17, 18, 20, 21, 22].map((h) => {
                   const label = h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`;
@@ -551,6 +608,7 @@ export default function ProfileScreen() {
                         paddingHorizontal: 14,
                       }]}
                       onPress={async () => {
+                        if (!isPremiumUser) { router.push('/paywall'); return; }
                         setNotifHour(h);
                         await updateProfile({ notificationHour: h });
                         await scheduleDailyReminder(h);
@@ -564,6 +622,22 @@ export default function ProfileScreen() {
             </>
           )}
 
+          <View style={[styles.toggleRow, { alignItems: 'flex-start' }]}>
+            <View style={{ flex: 1, paddingRight: 16 }}>
+              <Text style={[styles.toggleLabel, { color: colors.text }]}>Auto-complete on timer end</Text>
+              <Text style={[styles.toggleSub, { color: colors.textSecondary }]}>Finish session automatically when the timer reaches zero</Text>
+            </View>
+            <Switch
+              value={autoCompleteOn}
+              onValueChange={(v) => {
+                setAutoCompleteOn(v);
+                updateProfile({ autoComplete: v });
+              }}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor="#FFF"
+            />
+          </View>
+
           <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>DANGER ZONE</Text>
           <Pressable style={[styles.dangerBtn, { borderColor: '#C0392B' }]} onPress={resetProgress}>
             <Text style={{ color: '#C0392B', fontWeight: '600', fontSize: 15 }}>Reset Progress</Text>
@@ -571,9 +645,29 @@ export default function ProfileScreen() {
 
           <Text style={[styles.versionText, { color: colors.textSecondary }]}>Listen · v1.0.0</Text>
 
+          <Pressable style={styles.aboutHeader} onPress={() => setAboutExpanded((v) => !v)}>
+            <Text style={[styles.aboutHeaderText, { color: colors.text }]}>About</Text>
+            <Text style={[styles.aboutChevron, { color: colors.textSecondary }]}>{aboutExpanded ? '▲' : '▼'}</Text>
+          </Pressable>
+          {aboutExpanded && (
+            <View style={[styles.aboutBody, { borderColor: colors.border }]}>
+              <Text style={[styles.aboutStory, { color: colors.textSecondary }]}>
+                {"Created by Syreese Delos Santos — fed up with doom scrolling, wanted to actually enjoy his audio gear and listen to full albums without distractions. Listen is the app he wished existed."}
+              </Text>
+              <Text style={[styles.changelogTitle, { color: colors.text }]}>Changelog</Text>
+              <Text style={[styles.changelogEntry, { color: colors.textSecondary }]}>
+                {"v1.0  —  Session timer, XP & leveling, gear tracking, achievements, streaks, history, stats"}
+              </Text>
+              <Text style={[styles.changelogEntry, { color: colors.textSecondary }]}>
+                {"Recent  —  History search, monthly & all-time stats, push notifications, weekly recap, streak shields, session sharing, custom notification time, auto-complete toggle, expandable About"}
+              </Text>
+            </View>
+          )}
+
           <Pressable onPress={() => setSettingsVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.border }]}>
             <Text style={[{ fontSize: 15, fontWeight: '600' }, { color: colors.text }]}>Close</Text>
           </Pressable>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -663,6 +757,17 @@ const styles = StyleSheet.create({
   stepperVal: { fontSize: 17, fontWeight: '600', flex: 1, textAlign: 'center' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
   toggleLabel: { fontSize: 15, fontWeight: '500' },
+  toggleSub: { fontSize: 12, marginTop: 2, lineHeight: 16 },
   weekRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
   weekBtn: { flex: 1, borderWidth: 1.5, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
+  upgradeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 20 },
+  upgradeRowText: { fontSize: 14, fontWeight: '600' },
+  upgradeRowArrow: { fontSize: 16, fontWeight: '700' },
+  aboutHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, marginBottom: 4 },
+  aboutHeaderText: { fontSize: 15, fontWeight: '500' },
+  aboutChevron: { fontSize: 12 },
+  aboutBody: { borderTopWidth: 1, paddingTop: 14, marginBottom: 24, gap: 12 },
+  aboutStory: { fontSize: 13, lineHeight: 20 },
+  changelogTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginTop: 4 },
+  changelogEntry: { fontSize: 12, lineHeight: 18 },
 });

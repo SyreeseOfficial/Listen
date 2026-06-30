@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions } from 'react-native';
 import { useState, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
 import { getSessions, getProfile, updateProfile, type Session } from '../../utils/storage';
 import { computeStats, formatDuration } from '../../utils/stats';
@@ -94,6 +94,8 @@ export default function StatsScreen() {
   const [userLevel, setUserLevel] = useState(1);
   const [rawSessions, setRawSessions] = useState<Session[]>([]);
   const [period, setPeriod] = useState<Period>('week');
+  const [isPremiumUser, setIsPremiumUser] = useState(false);
+  const router = useRouter();
 
   useFocusEffect(
     useCallback(() => {
@@ -108,6 +110,7 @@ export default function StatsScreen() {
         setMilestone(getMilestone(s));
         setPhantomInsights(getPhantomInsights(sessions));
 
+        setIsPremiumUser(profile?.isPremium ?? false);
         const lvl = require('../../utils/xp').getLevelInfo(profile?.xp ?? 0).level;
         setUserLevel(lvl);
         setLeaderboard(getFakeLeaderboard(lvl, profile?.name ?? 'You'));
@@ -169,21 +172,32 @@ export default function StatsScreen() {
       )}
 
       {/* Shields */}
-      <View style={[styles.shieldRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
+      <Pressable
+        style={[styles.shieldRow, { borderColor: colors.border, backgroundColor: colors.card }]}
+        onPress={() => { if (!isPremiumUser) router.push('/paywall'); }}
+      >
         <View style={styles.shieldSlots}>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Text key={i} style={[styles.shieldIcon, { opacity: i < shields ? 1 : 0.2 }]}>🛡</Text>
-          ))}
+          {Array.from({ length: 3 }).map((_, i) => {
+            const filled = isPremiumUser ? i < shields : i === 0 && shields > 0;
+            const locked = !isPremiumUser && i > 0;
+            return (
+              <Text key={i} style={[styles.shieldIcon, { opacity: filled ? 1 : 0.2 }]}>
+                {locked ? '🔒' : '🛡'}
+              </Text>
+            );
+          })}
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.shieldLabel, { color: colors.text }]}>
-            {shields > 0 ? `${shields} streak shield${shields !== 1 ? 's' : ''}` : 'No shields'}
+            {shields > 0 ? `${isPremiumUser ? shields : Math.min(shields, 1)} streak shield${shields !== 1 ? 's' : ''}` : 'No shields'}
           </Text>
           <Text style={[styles.shieldSub, { color: colors.textSecondary }]}>
-            Earn 1 every 4-day streak. Protects against a missed day.
+            {isPremiumUser
+              ? 'Earn 1 every 4-day streak. Protects against a missed day.'
+              : 'Unlock unlimited shields with Pro →'}
           </Text>
         </View>
-      </View>
+      </Pressable>
 
       {/* Stats grid */}
       <View style={styles.grid}>
@@ -207,16 +221,26 @@ export default function StatsScreen() {
         return (
           <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.periodRow}>
-              {(['week', 'month', 'all'] as Period[]).map((p) => (
-                <Pressable key={p} onPress={() => setPeriod(p)} style={styles.periodBtn}>
-                  <Text style={[styles.periodBtnText, {
-                    color: period === p ? colors.accent : colors.textSecondary,
-                    fontWeight: period === p ? '600' : '400',
-                  }]}>
-                    {p === 'week' ? 'Week' : p === 'month' ? 'Month' : 'All Time'}
-                  </Text>
-                </Pressable>
-              ))}
+              {(['week', 'month', 'all'] as Period[]).map((p) => {
+                const locked = !isPremiumUser && (p === 'month' || p === 'all');
+                return (
+                  <Pressable
+                    key={p}
+                    onPress={() => {
+                      if (locked) { router.push('/paywall'); return; }
+                      setPeriod(p);
+                    }}
+                    style={styles.periodBtn}
+                  >
+                    <Text style={[styles.periodBtnText, {
+                      color: locked ? colors.border : period === p ? colors.accent : colors.textSecondary,
+                      fontWeight: period === p ? '600' : '400',
+                    }]}>
+                      {p === 'week' ? 'Week' : p === 'month' ? 'Month 🔒' : 'All Time 🔒'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
             {totalMins === 0 ? (
               <Text style={[styles.chartEmpty, { color: colors.textSecondary }]}>No sessions in this period</Text>

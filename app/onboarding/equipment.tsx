@@ -35,7 +35,7 @@ export default function EquipmentScreen() {
     if (items.length > 0) {
       await updateProfile({ equipment: items.map((i) => `${i.category}: ${i.name}`) });
     }
-    router.push('/onboarding/paywall');
+    router.push({ pathname: '/paywall', params: { from: 'onboarding' } });
   }
 
   return (

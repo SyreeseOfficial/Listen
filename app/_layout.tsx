@@ -25,6 +25,7 @@ function RootNavigator() {
         <Stack.Screen name="pre-session" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         <Stack.Screen name="session" options={{ animation: 'fade', gestureEnabled: false }} />
         <Stack.Screen name="complete" options={{ animation: 'fade', gestureEnabled: false }} />
+        <Stack.Screen name="paywall" options={{ animation: 'slide_from_bottom', presentation: 'modal', gestureEnabled: true }} />
       </Stack>
     </>
   );

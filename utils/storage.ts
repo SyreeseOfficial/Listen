@@ -30,6 +30,8 @@ export type UserProfile = {
   weeklyCommitment?: number;
   notificationsEnabled?: boolean;
   notificationHour?: number;
+  autoComplete?: boolean;
+  isPremium?: boolean;
 };
 
 const KEYS = {

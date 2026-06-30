@@ -2,11 +2,11 @@ import {
   View, Text, StyleSheet, FlatList, Pressable, Dimensions, ScrollView, TextInput, Modal,
 } from 'react-native';
 import { useState, useCallback, useRef } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '../../context/ThemeContext';
-import { getSessions, updateSession, deleteSession, type Session } from '../../utils/storage';
+import { getSessions, getProfile, updateSession, deleteSession, type Session } from '../../utils/storage';
 import { formatDuration } from '../../utils/stats';
 import SessionShareCard from '../../components/SessionShareCard';
 
@@ -75,11 +75,16 @@ export default function HistoryScreen() {
   const [editAlbum, setEditAlbum] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [shareSession, setShareSession] = useState<Session | null>(null);
+  const [isPremiumUser, setIsPremiumUser] = useState(false);
   const shareCardRef = useRef<View>(null);
+  const router = useRouter();
 
   useFocusEffect(
     useCallback(() => {
-      getSessions().then(setSessions);
+      Promise.all([getSessions(), getProfile()]).then(([s, p]) => {
+        setSessions(s);
+        setIsPremiumUser(p?.isPremium ?? false);
+      });
     }, [])
   );
 
@@ -279,8 +284,13 @@ export default function HistoryScreen() {
                             {item.rating == null && !item.album && !item.notes ? 'Log →' : 'Edit →'}
                           </Text>
                         </Pressable>
-                        <Pressable onPress={() => setShareSession(item)}>
-                          <Text style={[styles.editTrigger, { color: colors.accent }]}>Share ↗</Text>
+                        <Pressable onPress={() => {
+                          if (!isPremiumUser) { router.push('/paywall'); return; }
+                          setShareSession(item);
+                        }}>
+                          <Text style={[styles.editTrigger, { color: isPremiumUser ? colors.accent : colors.border }]}>
+                            {isPremiumUser ? 'Share ↗' : 'Share 🔒'}
+                          </Text>
                         </Pressable>
                         <Pressable onPress={() => handleDelete(item.id)}>
                           <Text style={[styles.editTrigger, { color: '#C0392B' }]}>Delete</Text>
@@ -314,15 +324,24 @@ export default function HistoryScreen() {
 
                       {/* Notes */}
                       <Text style={[styles.editLabel, { color: colors.textSecondary }]}>Notes</Text>
-                      <TextInput
-                        style={[styles.editInput, styles.editInputMulti, { color: colors.text, borderColor: colors.border }]}
-                        value={editNotes}
-                        onChangeText={setEditNotes}
-                        placeholder="Anything worth remembering"
-                        placeholderTextColor={colors.textSecondary}
-                        multiline
-                        returnKeyType="done"
-                      />
+                      {isPremiumUser ? (
+                        <TextInput
+                          style={[styles.editInput, styles.editInputMulti, { color: colors.text, borderColor: colors.border }]}
+                          value={editNotes}
+                          onChangeText={setEditNotes}
+                          placeholder="Anything worth remembering"
+                          placeholderTextColor={colors.textSecondary}
+                          multiline
+                          returnKeyType="done"
+                        />
+                      ) : (
+                        <Pressable
+                          style={[styles.editInput, styles.editInputMulti, styles.lockedField, { borderColor: colors.border, backgroundColor: colors.background }]}
+                          onPress={() => router.push('/paywall')}
+                        >
+                          <Text style={{ color: colors.textSecondary, fontSize: 14 }}>🔒 Upgrade to add notes</Text>
+                        </Pressable>
+                      )}
 
                       {/* Save / Cancel */}
                       <View style={styles.editActions}>
@@ -421,6 +440,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   editInputMulti: { minHeight: 72, textAlignVertical: 'top' },
+  lockedField: { justifyContent: 'center' },
   editActions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   saveBtn: { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   saveBtnText: { color: '#FFF', fontSize: 14, fontWeight: '600' },

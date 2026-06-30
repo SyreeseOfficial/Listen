@@ -6,7 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as KeepAwake from 'expo-keep-awake';
 import { useTheme } from '../context/ThemeContext';
-import { saveSession } from '../utils/storage';
+import { saveSession, getProfile } from '../utils/storage';
 import { formatCountdown } from '../utils/stats';
 
 export default function SessionScreen() {
@@ -20,10 +20,15 @@ export default function SessionScreen() {
   const [sessionId] = useState(() => Date.now().toString());
   const effectiveTotalRef = useRef(totalSeconds);
   const remainingRef = useRef(totalSeconds);
+  const autoCompleteRef = useRef(true);
   const appState = useRef(AppState.currentState);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   KeepAwake.useKeepAwake();
+
+  useEffect(() => {
+    getProfile().then((p) => { autoCompleteRef.current = p?.autoComplete ?? true; });
+  }, []);
 
   useEffect(() => {
     if (paused) { pulseAnim.setValue(1); return; }
@@ -44,7 +49,18 @@ export default function SessionScreen() {
         if (prev <= 1) {
           clearInterval(interval);
           remainingRef.current = 0;
-          finish(true);
+          if (autoCompleteRef.current) {
+            finish(true);
+          } else {
+            Alert.alert(
+              'Timer reached zero',
+              'Finish your session or keep going?',
+              [
+                { text: 'Keep going', style: 'cancel' },
+                { text: 'Finish session', onPress: () => finish(true) },
+              ]
+            );
+          }
           return 0;
         }
         const next = prev - 1;
