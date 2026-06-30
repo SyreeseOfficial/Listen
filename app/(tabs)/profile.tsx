@@ -5,7 +5,9 @@ import {
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
+import { ACCENT_THEMES, type AccentThemeKey } from '../../constants/theme';
 import { getProfile, updateProfile, getSessions } from '../../utils/storage';
+import { exportHistory } from '../../utils/export';
 import { setHapticsEnabled } from '../../utils/haptics';
 import * as Haptics from '../../utils/haptics';
 import { scheduleDailyReminder, scheduleWeeklyRecap, cancelAllListenNotifications } from '../../utils/notifications';
@@ -31,7 +33,7 @@ const THEME_OPTIONS = [
 ];
 
 export default function ProfileScreen() {
-  const { colors, pref, setPref } = useTheme();
+  const { colors, pref, setPref, isDark, accentTheme, setAccentTheme } = useTheme();
   const [profile, setProfile] = useState<any>(null);
   const [category, setCategory] = useState('Headphones');
   const [inputValue, setInputValue] = useState('');
@@ -514,7 +516,44 @@ export default function ProfileScreen() {
             ))}
           </View>
 
-          <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>DEFAULT SESSION LENGTH</Text>
+          <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>
+            ACCENT COLOR{!isPremiumUser ? '  🔒 PRO' : ''}
+          </Text>
+          <View style={styles.swatchRow}>
+            {(Object.entries(ACCENT_THEMES) as [AccentThemeKey, typeof ACCENT_THEMES[AccentThemeKey]][]).map(([key, val]) => {
+              const locked = !isPremiumUser && key !== 'default';
+              const active = accentTheme === key;
+              const swatchColor = isDark ? val.dark : val.light;
+              return (
+                <Pressable
+                  key={key}
+                  hitSlop={6}
+                  onPress={() => {
+                    if (locked) { router.push('/paywall'); return; }
+                    setAccentTheme(key);
+                  }}
+                  style={[styles.swatch, {
+                    backgroundColor: swatchColor,
+                    borderWidth: active ? 3 : 1.5,
+                    borderColor: active ? swatchColor : colors.border,
+                    opacity: locked ? 0.45 : 1,
+                  }]}
+                >
+                  {locked && <Text style={styles.swatchLock}>🔒</Text>}
+                  {active && !locked && <Text style={styles.swatchCheck}>✓</Text>}
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={styles.swatchLabels}>
+            {(Object.entries(ACCENT_THEMES) as [AccentThemeKey, typeof ACCENT_THEMES[AccentThemeKey]][]).map(([key, val]) => (
+              <Text key={key} style={[styles.swatchLabel, { color: accentTheme === key ? colors.accent : colors.textSecondary }]}>
+                {val.label}
+              </Text>
+            ))}
+          </View>
+
+          <Text style={[styles.settingLabel, { color: colors.textSecondary, marginTop: 4 }]}>DEFAULT SESSION LENGTH</Text>
           <View style={styles.stepperRow}>
             <Pressable
               style={[styles.stepperBtn, { borderColor: colors.border }]}
@@ -638,6 +677,20 @@ export default function ProfileScreen() {
             />
           </View>
 
+          {isPremiumUser && (
+            <>
+              <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>DATA</Text>
+              <Pressable
+                style={[styles.dangerBtn, { borderColor: colors.border }]}
+                onPress={async () => {
+                  try { await exportHistory(); } catch (_) {}
+                }}
+              >
+                <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>Export History as CSV</Text>
+              </Pressable>
+            </>
+          )}
+
           <Text style={[styles.settingLabel, { color: colors.textSecondary }]}>DANGER ZONE</Text>
           <Pressable style={[styles.dangerBtn, { borderColor: '#C0392B' }]} onPress={resetProgress}>
             <Text style={{ color: '#C0392B', fontWeight: '600', fontSize: 15 }}>Reset Progress</Text>
@@ -760,6 +813,12 @@ const styles = StyleSheet.create({
   toggleSub: { fontSize: 12, marginTop: 2, lineHeight: 16 },
   weekRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
   weekBtn: { flex: 1, borderWidth: 1.5, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
+  swatchRow: { flexDirection: 'row', gap: 12, marginBottom: 6 },
+  swatch: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  swatchLock: { fontSize: 12 },
+  swatchCheck: { fontSize: 13, color: '#FFF', fontWeight: '700' },
+  swatchLabels: { flexDirection: 'row', gap: 12, marginBottom: 24 },
+  swatchLabel: { width: 40, fontSize: 10, textAlign: 'center', fontWeight: '500' },
   upgradeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 20 },
   upgradeRowText: { fontSize: 14, fontWeight: '600' },
   upgradeRowArrow: { fontSize: 16, fontWeight: '700' },

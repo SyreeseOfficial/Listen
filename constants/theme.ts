@@ -31,3 +31,14 @@ export type ThemeColors = {
   tabBar: string;
   tabBarBorder: string;
 };
+
+export const ACCENT_THEMES = {
+  default: { label: 'Sand',   light: '#9B7E5A', dark: '#C8A97A' },
+  amber:   { label: 'Amber',  light: '#C07820', dark: '#E8A030' },
+  sage:    { label: 'Sage',   light: '#4E7A52', dark: '#6EA074' },
+  rose:    { label: 'Rose',   light: '#A84F5E', dark: '#C87082' },
+  slate:   { label: 'Slate',  light: '#3E6080', dark: '#5E88AA' },
+  terra:   { label: 'Terra',  light: '#A85030', dark: '#C87050' },
+} as const;
+
+export type AccentThemeKey = keyof typeof ACCENT_THEMES;

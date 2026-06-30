@@ -32,6 +32,7 @@ export type UserProfile = {
   notificationHour?: number;
   autoComplete?: boolean;
   isPremium?: boolean;
+  accentTheme?: string;
 };
 
 const KEYS = {
