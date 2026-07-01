@@ -1,5 +1,6 @@
 import {
   View, Text, StyleSheet, Pressable, ScrollView, Alert, Dimensions,
+  Modal, Animated,
 } from 'react-native';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -7,7 +8,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { getProfile, getSessions, getPendingSession, clearPendingSession } from '../../utils/storage';
 import { computeStats, formatDuration } from '../../utils/stats';
 import { getFakeListenerCount, getMilestone, computeArchetype, getIdentityMessage, getRegretInjection, getParasocialBuddy } from '../../utils/engagement';
-import { getLevelInfo, getStreakMultiplierLabel, getNearMissAchievements, getEndowedProgress } from '../../utils/xp';
+import { getLevelInfo, getStreakMultiplierLabel } from '../../utils/xp';
 import { getFakeSocialCard } from '../../utils/social';
 import { getCurrentWeekBadge, checkWeeklyBadge } from '../../constants/timeBadges';
 import * as Haptics from '../../utils/haptics';
@@ -18,30 +19,67 @@ const DURATIONS = Array.from({ length: 120 }, (_, i) => i + 1);
 const ITEM_HEIGHT = 52;
 const CARD_W = width * 0.62;
 
+const RAW_TICKER = [
+  'Marcus T. just hit a 21-day streak',
+  'Priya K. unlocked "The Regular"',
+  'Jordan L. logged their 50th session',
+  'Sam R. is on a 9-day streak',
+  'Alex M. reached Level 7',
+  'Riley B. hit 10 hours of listening',
+  'Morgan C. earned "Iron Ears"',
+  'Casey D. just finished a 90-minute session',
+  'Jamie L. completed their 100th session',
+  'Taylor S. has listened 14 days straight',
+  'Drew P. just hit Level 5',
+  'Quinn A. logged 25 total hours',
+  'Blake N. completed a perfect week',
+  'Avery W. unlocked "Century"',
+  'Charlie T. just hit a 30-day streak',
+  'Sage L. rated 10 sessions this month',
+  'River S. unlocked "Deep Dive"',
+];
+
+function getTimeUntilMidnight(): string {
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 0);
+  const diff = midnight.getTime() - now.getTime();
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 type InsightCard = {
-  id: string;
-  tag: string;
-  title: string;
-  body: string;
-  cta?: string;
-  onPress?: () => void;
-  urgent?: boolean;
+  id: string; tag: string; title: string; body: string;
+  cta?: string; onPress?: () => void; urgent?: boolean;
 };
+
+type StreakInfo = { streak: number; mult: string; hasListenedToday: boolean };
 
 export default function HomeScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const pickerRef = useRef<ScrollView>(null);
+  const slideAnim = useRef(new Animated.Value(500)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const tickerOpacity = useRef(new Animated.Value(1)).current;
+  const tickerY = useRef(new Animated.Value(0)).current;
+  const tickerIndexRef = useRef(0);
+  const tickerEvents = useRef([...RAW_TICKER].sort(() => Math.random() - 0.5)).current;
+
+  const [showPicker, setShowPicker] = useState(false);
   const [selectedMinutes, setSelectedMinutes] = useState(30);
   const [listenerCount, setListenerCount] = useState(getFakeListenerCount());
+  const [tickerText, setTickerText] = useState(tickerEvents[0]);
 
   const [userName, setUserName] = useState('');
   const [levelInfo, setLevelInfo] = useState(getLevelInfo(0));
   const [identityMessage, setIdentityMessage] = useState<string | null>(null);
   const [milestone, setMilestone] = useState<string | null>(null);
   const [cards, setCards] = useState<InsightCard[]>([]);
-  const [nearMiss, setNearMiss] = useState<ReturnType<typeof getNearMissAchievements>>([]);
   const [weeklyGoal, setWeeklyGoal] = useState<{ done: number; total: number } | null>(null);
+  const [streakInfo, setStreakInfo] = useState<StreakInfo | null>(null);
+  const [timeLeft, setTimeLeft] = useState(getTimeUntilMidnight());
 
   useFocusEffect(
     useCallback(() => {
@@ -53,43 +91,32 @@ export default function HomeScreen() {
         const name = p?.name ?? '';
         const archetype = computeArchetype(sessions);
 
-        // Sunk cost string
         const totalH = Math.floor(stats.totalSeconds / 3600);
         const totalM = Math.floor((stats.totalSeconds % 3600) / 60);
         const sunkStr = totalH > 0 ? `${totalH}h ${totalM}m` : totalM > 0 ? `${totalM}m` : null;
-
-        // Default session length
         const defaultMins = p?.defaultSessionMinutes ?? 30;
+        const todayStr = new Date().toDateString();
+        const hasListenedToday = sessions.some(
+          (s) => s.completed && new Date(s.completedAt).toDateString() === todayStr
+        );
 
         setUserName(name);
         setLevelInfo(li);
         setIdentityMessage(getIdentityMessage(archetype.title));
         setMilestone(getMilestone(stats));
-
-        // Near-miss with endowed progress for new users
-        const raw = getNearMissAchievements(sessions, p as any, stats);
-        const sessionCount = sessions.filter(s => s.completed).length;
-        const endowed = raw.map(item => ({
-          ...item,
-          progress: getEndowedProgress(item.achievement.id, item.progress, sessionCount),
-        }));
-        setNearMiss(endowed);
-
-        // Scroll picker to default
         setSelectedMinutes(defaultMins);
-        setTimeout(() => {
-          pickerRef.current?.scrollTo({ y: (defaultMins - 1) * ITEM_HEIGHT, animated: false });
-        }, 80);
+        setStreakInfo({
+          streak: stats.currentStreak,
+          mult: getStreakMultiplierLabel(stats.currentStreak),
+          hasListenedToday,
+        });
 
-        // Build insight cards using only local vars (no stale state)
         const built: InsightCard[] = [];
 
-        // 1. Streak XP decay / resurrection
         if (stats.currentStreak >= 1) {
-          const mult = getStreakMultiplierLabel(stats.currentStreak);
           built.push({
             id: 'streak', tag: 'XP BONUS',
-            title: `${mult} bonus active`,
+            title: `${getStreakMultiplierLabel(stats.currentStreak)} bonus active`,
             body: `Your ${stats.currentStreak}-day streak is boosting every session. Don't miss tonight.`,
             urgent: true,
           });
@@ -103,13 +130,11 @@ export default function HomeScreen() {
           });
         }
 
-        // 2. Regret injection — targeted, only when they missed yesterday
         const regret = getRegretInjection(sessions, p?.xp ?? 0);
         if (regret) {
-          built.push({ id: 'regret', tag: 'MISSED YESTERDAY', title: 'That session is gone.', body: regret, urgent: false });
+          built.push({ id: 'regret', tag: 'MISSED YESTERDAY', title: 'That session is gone.', body: regret });
         }
 
-        // 3. Grief — fallback if no regret card
         if (!regret) {
           const sorted = [...sessions].sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
           if (sorted.length > 0) {
@@ -124,7 +149,6 @@ export default function HomeScreen() {
           }
         }
 
-        // 4. Hot hand
         const sorted2 = [...sessions].sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
         const last = sorted2[0];
         if (last && (last.rating ?? 0) >= 4) {
@@ -139,13 +163,11 @@ export default function HomeScreen() {
           }
         }
 
-        // 5. Parasocial buddy
         if (name) {
           const buddy = getParasocialBuddy(name, stats.currentStreak);
           built.push({ id: 'buddy', tag: 'YOUR PARTNER', title: buddy.name, body: buddy.message });
         }
 
-        // 6. Social obligation
         const social = getFakeSocialCard(li.level);
         built.push({
           id: 'social', tag: 'LISTENERS',
@@ -153,7 +175,6 @@ export default function HomeScreen() {
           body: `${social.name} ${social.action} You're at Level ${li.level}.`,
         });
 
-        // 7. Sunk cost
         if (sunkStr && stats.sessionsCompleted > 0) {
           built.push({
             id: 'sunk', tag: 'YOUR JOURNEY',
@@ -162,7 +183,6 @@ export default function HomeScreen() {
           });
         }
 
-        // 8. Weekly badge
         const { badge, weekId, daysLeft } = getCurrentWeekBadge();
         const weekEarned = (p?.achievements ?? []).includes(weekId) || checkWeeklyBadge(badge, sessions, stats);
         built.push({
@@ -175,74 +195,81 @@ export default function HomeScreen() {
 
         setCards(built);
 
-        // Weekly goal progress
         const commitment = p?.weeklyCommitment;
         if (commitment) {
           const now = new Date();
           const daysToMonday = (now.getDay() + 6) % 7;
           const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysToMonday);
-          const done = sessions.filter(
-            (s) => s.completed && new Date(s.completedAt) >= weekStart
-          ).length;
+          const done = sessions.filter((s) => s.completed && new Date(s.completedAt) >= weekStart).length;
           setWeeklyGoal({ done: Math.min(done, commitment), total: commitment });
         } else {
           setWeeklyGoal(null);
         }
 
-        // Streak at-risk notification
-        if (p?.notificationsEnabled) {
-          const today = new Date();
-          const todayStr = today.toDateString();
-          const hasSessionToday = sessions.some(
-            (s) => s.completed && new Date(s.completedAt).toDateString() === todayStr
-          );
-          if (!hasSessionToday) {
-            scheduleStreakRiskTonight(p?.notificationHour ?? 21);
-          }
+        if (p?.notificationsEnabled && !hasListenedToday) {
+          scheduleStreakRiskTonight(p?.notificationHour ?? 21);
         }
       }
       load();
     }, [])
   );
 
+  // Live listener count
   useEffect(() => {
     const interval = setInterval(() => setListenerCount(getFakeListenerCount()), 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // One-time check on app open: resume an interrupted session
+  // Streak countdown — only ticks when at risk
+  useEffect(() => {
+    if (!streakInfo?.streak || streakInfo.hasListenedToday) return;
+    const interval = setInterval(() => setTimeLeft(getTimeUntilMidnight()), 60000);
+    return () => clearInterval(interval);
+  }, [streakInfo]);
+
+  // Vertical ticker
+  useEffect(() => {
+    const interval = setInterval(() => {
+      Animated.parallel([
+        Animated.timing(tickerOpacity, { toValue: 0, duration: 280, useNativeDriver: true }),
+        Animated.timing(tickerY, { toValue: -10, duration: 280, useNativeDriver: true }),
+      ]).start(() => {
+        tickerIndexRef.current = (tickerIndexRef.current + 1) % tickerEvents.length;
+        setTickerText(tickerEvents[tickerIndexRef.current]);
+        tickerY.setValue(10);
+        Animated.parallel([
+          Animated.timing(tickerOpacity, { toValue: 1, duration: 280, useNativeDriver: true }),
+          Animated.timing(tickerY, { toValue: 0, duration: 280, useNativeDriver: true }),
+        ]).start();
+      });
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Session resume prompt
   useEffect(() => {
     getPendingSession().then((pending) => {
       if (!pending) return;
       const elapsedSinceSave = Math.floor((Date.now() - new Date(pending.savedAt).getTime()) / 1000);
       const adjustedRemaining = Math.max(0, pending.remainingSeconds - elapsedSinceSave);
       const minsLeft = Math.ceil(adjustedRemaining / 60);
-
       Alert.alert(
         'Resume session?',
         adjustedRemaining > 0
           ? `You have ${minsLeft} minute${minsLeft !== 1 ? 's' : ''} left in an active session.`
-          : "Your timer ran out while the app was closed.",
+          : 'Your timer ran out while the app was closed.',
         [
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () => clearPendingSession(),
-          },
+          { text: 'Discard', style: 'destructive', onPress: () => clearPendingSession() },
           {
             text: adjustedRemaining > 0 ? 'Resume' : 'Finish session',
-            onPress: () => {
-              router.push({
-                pathname: '/session',
-                params: {
-                  minutes: pending.minutes,
-                  equipment: pending.equipment,
-                  resumeRemaining: String(adjustedRemaining),
-                  resumeTotal: String(pending.totalSeconds),
-                  sessionId: pending.sessionId,
-                },
-              });
-            },
+            onPress: () => router.push({
+              pathname: '/session',
+              params: {
+                minutes: pending.minutes, equipment: pending.equipment,
+                resumeRemaining: String(adjustedRemaining), resumeTotal: String(pending.totalSeconds),
+                sessionId: pending.sessionId,
+              },
+            }),
           },
         ],
         { cancelable: false }
@@ -250,19 +277,39 @@ export default function HomeScreen() {
     });
   }, []);
 
-  function handleStart() {
+  function openPicker() {
     Haptics.impact();
-    router.push({ pathname: '/pre-session', params: { minutes: selectedMinutes } });
+    setShowPicker(true);
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, tension: 60, friction: 12, useNativeDriver: true }),
+    ]).start();
+    setTimeout(() => {
+      pickerRef.current?.scrollTo({ y: (selectedMinutes - 1) * ITEM_HEIGHT, animated: false });
+    }, 60);
   }
 
+  function closePicker() {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 500, duration: 200, useNativeDriver: true }),
+    ]).start(() => setShowPicker(false));
+  }
+
+  function handleStart() {
+    closePicker();
+    setTimeout(() => {
+      router.push({ pathname: '/pre-session', params: { minutes: selectedMinutes } });
+    }, 200);
+  }
+
+  const showCountdown = streakInfo && streakInfo.streak >= 1;
+
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      showsVerticalScrollIndicator={false}
-      nestedScrollEnabled
-    >
-      {/* Hero section */}
-      <View style={[styles.hero, { minHeight: height * 0.86 }]}>
+    <>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+
+        {/* Header */}
         <View style={styles.header}>
           <View style={styles.wordmarkRow}>
             <Text style={[styles.wordmark, { color: colors.accent }]}>Listen</Text>
@@ -271,150 +318,131 @@ export default function HomeScreen() {
             </View>
           </View>
           {userName ? <Text style={[styles.greeting, { color: colors.textSecondary }]}>Hey, {userName}</Text> : null}
-          {identityMessage ? (
-            <Text style={[styles.identityMsg, { color: colors.accent }]}>{identityMessage}</Text>
-          ) : null}
+          {identityMessage ? <Text style={[styles.identityMsg, { color: colors.accent }]}>{identityMessage}</Text> : null}
           <Text style={[styles.liveCount, { color: colors.textSecondary }]}>
             ◎ {listenerCount.toLocaleString()} listening now
           </Text>
         </View>
 
-        <View style={styles.pickerSection}>
-          <Text style={[styles.pickerLabel, { color: colors.textSecondary }]}>SESSION LENGTH</Text>
-          <View style={styles.pickerWrapper}>
-            <View style={[styles.pickerHighlight, { borderColor: colors.border }]} />
-            <ScrollView
-              ref={pickerRef}
-              style={styles.pickerScroll}
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled
-              snapToInterval={ITEM_HEIGHT}
-              decelerationRate="fast"
-              contentContainerStyle={{ paddingVertical: ITEM_HEIGHT * 2 }}
-              onMomentumScrollEnd={(e) => {
-                const index = Math.round(e.nativeEvent.contentOffset.y / ITEM_HEIGHT);
-                const clamped = Math.max(0, Math.min(index, DURATIONS.length - 1));
-                setSelectedMinutes(DURATIONS[clamped]);
-                Haptics.selection();
-              }}
-            >
-              {DURATIONS.map((min) => (
-                <View key={min} style={[styles.pickerItem, { height: ITEM_HEIGHT }]}>
-                  <Text
-                    style={[
-                      styles.pickerItemText,
-                      { color: min === selectedMinutes ? colors.text : colors.textSecondary },
-                      min === selectedMinutes && styles.pickerItemSelected,
-                    ]}
-                  >
-                    {formatDuration(min * 60)}
-                  </Text>
-                </View>
+        {/* Flex middle — button + countdown */}
+        <View style={styles.middle}>
+          <Pressable style={[styles.startButton, { backgroundColor: colors.accent }]} onPress={openPicker}>
+            <Text style={styles.startText}>Begin Session</Text>
+          </Pressable>
+
+          {showCountdown && (
+            <Text style={[styles.countdown, { color: streakInfo.hasListenedToday ? colors.accent : colors.text }]}>
+              {streakInfo.hasListenedToday
+                ? `🔥 ${streakInfo.mult} XP active · safe today ✓`
+                : `🔥 ${streakInfo.mult} XP resets in ${timeLeft}`}
+            </Text>
+          )}
+
+          {milestone && (
+            <Text style={[styles.milestone, { color: colors.textSecondary }]}>↑ {milestone}</Text>
+          )}
+        </View>
+
+        {/* Live ticker */}
+        <View style={[styles.tickerWrap, { borderTopColor: colors.border }]}>
+          <Animated.Text
+            style={[styles.tickerText, { color: colors.textSecondary, opacity: tickerOpacity, transform: [{ translateY: tickerY }] }]}
+            numberOfLines={1}
+          >
+            ◎  {tickerText}
+          </Animated.Text>
+        </View>
+
+        {/* Weekly goal */}
+        {weeklyGoal && (
+          <View style={styles.goalSection}>
+            <View style={styles.goalHeader}>
+              <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>WEEKLY GOAL</Text>
+              <Text style={[styles.goalCount, { color: weeklyGoal.done >= weeklyGoal.total ? colors.accent : colors.text }]}>
+                {weeklyGoal.done}/{weeklyGoal.total}{weeklyGoal.done >= weeklyGoal.total ? '  ✓' : ''}
+              </Text>
+            </View>
+            <View style={[styles.goalTrack, { backgroundColor: colors.border }]}>
+              <View style={[styles.goalFill, { backgroundColor: colors.accent, width: `${Math.min((weeklyGoal.done / weeklyGoal.total) * 100, 100)}%` }]} />
+            </View>
+          </View>
+        )}
+
+        {/* Insight cards */}
+        {cards.length > 0 && (
+          <View style={styles.cardsSection}>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginBottom: 10 }]}>YOUR INSIGHTS</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cardsRow}>
+              {cards.map((card) => (
+                <Pressable
+                  key={card.id}
+                  style={[styles.insightCard, { backgroundColor: colors.card, borderColor: card.urgent ? colors.accent : colors.border }]}
+                  onPress={card.onPress}
+                  disabled={!card.onPress}
+                >
+                  <Text style={[styles.cardTag, { color: colors.accent }]}>{card.tag}</Text>
+                  <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={2}>{card.title}</Text>
+                  <Text style={[styles.cardBody, { color: colors.textSecondary }]} numberOfLines={3}>{card.body}</Text>
+                  {card.cta && <Text style={[styles.cardCta, { color: colors.accent }]}>{card.cta}</Text>}
+                </Pressable>
               ))}
             </ScrollView>
           </View>
-        </View>
+        )}
 
-        <View style={styles.startSection}>
-          <Pressable style={[styles.startButton, { backgroundColor: colors.accent }]} onPress={handleStart}>
-            <Text style={styles.startText}>Begin Session</Text>
-          </Pressable>
-          <Text style={[styles.hint, { color: colors.textSecondary }]}>
-            {selectedMinutes} minute{selectedMinutes !== 1 ? 's' : ''} of focused listening
-          </Text>
-          {milestone && <Text style={[styles.milestone, { color: colors.accent }]}>↑ {milestone}</Text>}
-        </View>
       </View>
 
-      {/* Weekly goal widget */}
-      {weeklyGoal && (
-        <View style={styles.goalSection}>
-          <View style={styles.goalHeader}>
-            <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginBottom: 0 }]}>WEEKLY GOAL</Text>
-            <Text style={[styles.goalCount, { color: weeklyGoal.done >= weeklyGoal.total ? colors.accent : colors.text }]}>
-              {weeklyGoal.done}/{weeklyGoal.total} days
-              {weeklyGoal.done >= weeklyGoal.total ? '  ✓' : ''}
-            </Text>
-          </View>
-          <View style={[styles.goalTrack, { backgroundColor: colors.border }]}>
-            <View style={[
-              styles.goalFill,
-              {
-                backgroundColor: colors.accent,
-                width: `${Math.min((weeklyGoal.done / weeklyGoal.total) * 100, 100)}%`,
-              },
-            ]} />
-          </View>
-        </View>
-      )}
-
-      {/* Insight cards */}
-      {cards.length > 0 && (
-        <>
-          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>YOUR INSIGHTS</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.cardsRow}
-          >
-            {cards.map((card) => (
-              <Pressable
-                key={card.id}
-                style={[styles.insightCard, {
-                  backgroundColor: colors.card,
-                  borderColor: card.urgent ? colors.accent : colors.border,
-                }]}
-                onPress={card.onPress}
-                disabled={!card.onPress}
+      {/* Duration picker bottom sheet */}
+      <Modal visible={showPicker} transparent animationType="none" onRequestClose={closePicker}>
+        <View style={styles.modalRoot}>
+          <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]}>
+            <Pressable style={StyleSheet.absoluteFillObject} onPress={closePicker} />
+          </Animated.View>
+          <Animated.View style={[styles.sheet, { backgroundColor: colors.background, transform: [{ translateY: slideAnim }] }]}>
+            <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+            <Text style={[styles.sheetLabel, { color: colors.textSecondary }]}>SESSION LENGTH</Text>
+            <View style={styles.pickerWrapper}>
+              <View style={[styles.pickerHighlight, { borderColor: colors.border }]} />
+              <ScrollView
+                ref={pickerRef}
+                style={styles.pickerScroll}
+                showsVerticalScrollIndicator={false}
+                snapToInterval={ITEM_HEIGHT}
+                decelerationRate="fast"
+                contentContainerStyle={{ paddingVertical: ITEM_HEIGHT * 2 }}
+                onMomentumScrollEnd={(e) => {
+                  const index = Math.round(e.nativeEvent.contentOffset.y / ITEM_HEIGHT);
+                  const clamped = Math.max(0, Math.min(index, DURATIONS.length - 1));
+                  setSelectedMinutes(DURATIONS[clamped]);
+                  Haptics.selection();
+                }}
               >
-                <Text style={[styles.cardTag, { color: colors.accent }]}>{card.tag}</Text>
-                <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={2}>{card.title}</Text>
-                <Text style={[styles.cardBody, { color: colors.textSecondary }]} numberOfLines={3}>{card.body}</Text>
-                {card.cta && <Text style={[styles.cardCta, { color: colors.accent }]}>{card.cta}</Text>}
-              </Pressable>
-            ))}
-          </ScrollView>
-        </>
-      )}
-
-      {/* Near-miss achievements */}
-      {nearMiss.length > 0 && (
-        <View style={styles.nearMissSection}>
-          <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginBottom: 12 }]}>ALMOST THERE</Text>
-          {nearMiss.map(({ achievement, progress }) => (
-            <View
-              key={achievement.id}
-              style={[styles.nearMissRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-            >
-              <View style={styles.nearMissMeta}>
-                <Text style={styles.nearMissIcon}>{achievement.icon}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.nearMissTitle, { color: colors.text }]}>{achievement.title}</Text>
-                  <Text style={[styles.nearMissDesc, { color: colors.textSecondary }]}>{achievement.description}</Text>
-                </View>
-                <Text style={[styles.nearMissPct, { color: colors.accent }]}>{Math.round(progress * 100)}%</Text>
-              </View>
-              <View style={[styles.nearMissTrack, { backgroundColor: colors.border }]}>
-                <View style={[styles.nearMissFill, { backgroundColor: colors.accent, width: `${progress * 100}%` }]} />
-              </View>
+                {DURATIONS.map((min) => (
+                  <View key={min} style={[styles.pickerItem, { height: ITEM_HEIGHT }]}>
+                    <Text style={[
+                      styles.pickerItemText,
+                      { color: min === selectedMinutes ? colors.text : colors.textSecondary },
+                      min === selectedMinutes && styles.pickerItemSelected,
+                    ]}>
+                      {formatDuration(min * 60)}
+                    </Text>
+                  </View>
+                ))}
+              </ScrollView>
             </View>
-          ))}
+            <Pressable style={[styles.sheetBtn, { backgroundColor: colors.accent }]} onPress={handleStart}>
+              <Text style={styles.sheetBtnText}>Start — {formatDuration(selectedMinutes * 60)}</Text>
+            </Pressable>
+          </Animated.View>
         </View>
-      )}
-
-      <View style={{ height: 32 }} />
-    </ScrollView>
+      </Modal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: {
-    paddingHorizontal: 32,
-    paddingTop: height * 0.1,
-    paddingBottom: 32,
-    justifyContent: 'space-between',
-  },
-  header: { gap: 3 },
+  container: { flex: 1, paddingTop: 52, paddingBottom: 20 },
+  header: { paddingHorizontal: 28, gap: 4, marginBottom: 4 },
   wordmarkRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   wordmark: { fontSize: 36, fontWeight: '300', letterSpacing: 4 },
   levelPill: { borderWidth: 1.5, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
@@ -422,9 +450,39 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 15 },
   identityMsg: { fontSize: 13, fontWeight: '500', fontStyle: 'italic' },
   liveCount: { fontSize: 12, marginTop: 2 },
-  pickerSection: { alignItems: 'center', gap: 16 },
-  pickerLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase' },
-  pickerWrapper: { height: ITEM_HEIGHT * 5, width: 160, position: 'relative' },
+  middle: { flex: 1, justifyContent: 'center', paddingHorizontal: 28, gap: 12 },
+  startButton: { borderRadius: 16, paddingVertical: 20, alignItems: 'center' },
+  startText: { color: '#FFF', fontSize: 18, fontWeight: '600', letterSpacing: 0.3 },
+  countdown: { fontSize: 13, fontWeight: '500', textAlign: 'center' },
+  milestone: { fontSize: 13, textAlign: 'center' },
+  tickerWrap: {
+    paddingHorizontal: 28, paddingVertical: 11,
+    borderTopWidth: StyleSheet.hairlineWidth, overflow: 'hidden',
+  },
+  tickerText: { fontSize: 13 },
+  sectionLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase' },
+  goalSection: { paddingHorizontal: 28, marginTop: 14, marginBottom: 2, gap: 8 },
+  goalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  goalCount: { fontSize: 13, fontWeight: '600' },
+  goalTrack: { height: 5, borderRadius: 3, overflow: 'hidden' },
+  goalFill: { height: 5, borderRadius: 3 },
+  cardsSection: { paddingTop: 14 },
+  cardsRow: { paddingHorizontal: 28, gap: 10, paddingRight: 36 },
+  insightCard: { width: CARD_W, borderWidth: 1.5, borderRadius: 18, padding: 18, gap: 6 },
+  cardTag: { fontSize: 10, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase' },
+  cardTitle: { fontSize: 17, fontWeight: '600', letterSpacing: -0.2, lineHeight: 22 },
+  cardBody: { fontSize: 13, lineHeight: 19 },
+  cardCta: { fontSize: 13, fontWeight: '600', marginTop: 2 },
+  // bottom sheet
+  modalRoot: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet: {
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingHorizontal: 28, paddingBottom: 40, paddingTop: 14, gap: 20,
+  },
+  sheetHandle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 4 },
+  sheetLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', textAlign: 'center' },
+  pickerWrapper: { height: ITEM_HEIGHT * 5, position: 'relative' },
   pickerHighlight: {
     position: 'absolute', top: ITEM_HEIGHT * 2, left: 0, right: 0,
     height: ITEM_HEIGHT, borderTopWidth: 1, borderBottomWidth: 1, zIndex: 1,
@@ -434,35 +492,6 @@ const styles = StyleSheet.create({
   pickerItem: { justifyContent: 'center', alignItems: 'center' },
   pickerItemText: { fontSize: 22, fontWeight: '300' },
   pickerItemSelected: { fontSize: 26, fontWeight: '500' },
-  startSection: { gap: 12, alignItems: 'center' },
-  startButton: { borderRadius: 16, paddingVertical: 20, paddingHorizontal: 64 },
-  startText: { color: '#FFF', fontSize: 18, fontWeight: '600', letterSpacing: 0.3 },
-  hint: { fontSize: 14 },
-  milestone: { fontSize: 13, fontWeight: '500', textAlign: 'center' },
-  sectionLabel: {
-    fontSize: 11, fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase',
-    paddingHorizontal: 24, marginBottom: 10,
-  },
-  goalSection: { paddingHorizontal: 24, marginBottom: 20, gap: 10 },
-  goalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 0 },
-  goalCount: { fontSize: 14, fontWeight: '600' },
-  goalTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
-  goalFill: { height: 6, borderRadius: 3 },
-  cardsRow: { paddingHorizontal: 24, gap: 10, paddingBottom: 4, paddingRight: 32 },
-  insightCard: {
-    width: CARD_W, borderWidth: 1.5, borderRadius: 18, padding: 18, gap: 6,
-  },
-  cardTag: { fontSize: 10, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase' },
-  cardTitle: { fontSize: 17, fontWeight: '600', letterSpacing: -0.2, lineHeight: 22 },
-  cardBody: { fontSize: 13, lineHeight: 19 },
-  cardCta: { fontSize: 13, fontWeight: '600', marginTop: 2 },
-  nearMissSection: { paddingHorizontal: 24, paddingTop: 24 },
-  nearMissRow: { borderWidth: 1.5, borderRadius: 14, padding: 14, marginBottom: 10 },
-  nearMissMeta: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
-  nearMissIcon: { fontSize: 22, width: 28, textAlign: 'center' },
-  nearMissTitle: { fontSize: 14, fontWeight: '600' },
-  nearMissDesc: { fontSize: 12, marginTop: 1 },
-  nearMissPct: { fontSize: 14, fontWeight: '700', minWidth: 38, textAlign: 'right' },
-  nearMissTrack: { height: 4, borderRadius: 2, overflow: 'hidden' },
-  nearMissFill: { height: 4, borderRadius: 2 },
+  sheetBtn: { borderRadius: 16, paddingVertical: 18, alignItems: 'center' },
+  sheetBtnText: { color: '#FFF', fontSize: 17, fontWeight: '700', letterSpacing: 0.3 },
 });

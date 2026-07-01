@@ -41,19 +41,27 @@ export function getFakeListenerCount(): number {
 
 const SESSION_MILESTONES = [5, 10, 25, 50, 100, 250, 500];
 const TIME_MILESTONES_H = [5, 10, 25, 50, 100, 250];
+const SESSION_BADGE: Record<number, string> = { 10: 'Getting Started', 25: 'The Regular', 50: 'The Purist', 100: 'Century' };
+const HOUR_BADGE: Record<number, string> = { 5: 'Iron Ears', 10: 'Deep Ears', 50: 'Hi-Fi Soul' };
 
 export function getMilestone(stats: Stats): string | null {
   const nextSessions = SESSION_MILESTONES.find((m) => m > stats.sessionsCompleted);
   if (nextSessions) {
     const left = nextSessions - stats.sessionsCompleted;
-    if (left <= 5) return `${left} session${left === 1 ? '' : 's'} until you hit ${nextSessions} total.`;
+    const badge = SESSION_BADGE[nextSessions];
+    if (left <= 5) return badge
+      ? `${left} session${left === 1 ? '' : 's'} away from "${badge}"`
+      : `${left} session${left === 1 ? '' : 's'} until ${nextSessions} total`;
   }
 
   const totalHours = stats.totalSeconds / 3600;
   const nextHours = TIME_MILESTONES_H.find((m) => m > totalHours);
   if (nextHours) {
     const minsLeft = Math.round((nextHours - totalHours) * 60);
-    if (minsLeft <= 120) return `${minsLeft} more minutes until ${nextHours} total hours.`;
+    const badge = HOUR_BADGE[nextHours];
+    if (minsLeft <= 120) return badge
+      ? `${minsLeft} min away from "${badge}"`
+      : `${minsLeft} min until ${nextHours}h total`;
   }
 
   if (stats.longestStreak > 0 && stats.currentStreak > 0) {

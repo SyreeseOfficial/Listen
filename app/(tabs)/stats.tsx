@@ -8,6 +8,8 @@ import {
   computeArchetype, getEgoFuel, getMilestone,
   getPhantomInsights, getFakeLeaderboard, getFakeGlobalRank,
 } from '../../utils/engagement';
+import { getNearMissAchievements, getEndowedProgress, getLevelInfo as getLvl } from '../../utils/xp';
+import type { Achievement } from '../../constants/achievements';
 import type { Archetype } from '../../utils/engagement';
 
 const { height, width: SCREEN_W } = Dimensions.get('window');
@@ -124,6 +126,7 @@ export default function StatsScreen() {
   const [rawSessions, setRawSessions] = useState<Session[]>([]);
   const [period, setPeriod] = useState<Period>('week');
   const [isPremiumUser, setIsPremiumUser] = useState(false);
+  const [nearMiss, setNearMiss] = useState<Array<{ achievement: Achievement; progress: number }>>([]);
   const router = useRouter();
   const heatmapWeeks = useMemo(() => getHeatmapWeeks(rawSessions), [rawSessions]);
 
@@ -141,7 +144,13 @@ export default function StatsScreen() {
         setPhantomInsights(getPhantomInsights(sessions));
 
         setIsPremiumUser(profile?.isPremium ?? false);
-        const lvl = require('../../utils/xp').getLevelInfo(profile?.xp ?? 0).level;
+        const lvl = getLvl(profile?.xp ?? 0).level;
+        const raw = getNearMissAchievements(sessions, profile!, s);
+        const sessionCount = sessions.filter((sess) => sess.completed).length;
+        setNearMiss(raw.map((item) => ({
+          ...item,
+          progress: getEndowedProgress(item.achievement.id, item.progress, sessionCount),
+        })));
         setUserLevel(lvl);
         setLeaderboard(getFakeLeaderboard(lvl, profile?.name ?? 'You'));
         setGlobalRank(getFakeGlobalRank(SEED_DAY + lvl));
@@ -365,6 +374,28 @@ export default function StatsScreen() {
         </View>
       )}
 
+      {/* Near-miss achievements */}
+      {nearMiss.length > 0 && (
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.cardTag, { color: colors.accent }]}>ALMOST THERE</Text>
+          {nearMiss.map(({ achievement, progress }) => (
+            <View key={achievement.id} style={styles.nearMissRow}>
+              <View style={styles.nearMissMeta}>
+                <Text style={styles.nearMissIcon}>{achievement.icon}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.nearMissTitle, { color: colors.text }]}>{achievement.title}</Text>
+                  <Text style={[styles.nearMissDesc, { color: colors.textSecondary }]}>{achievement.description}</Text>
+                </View>
+                <Text style={[styles.nearMissPct, { color: colors.accent }]}>{Math.round(progress * 100)}%</Text>
+              </View>
+              <View style={[styles.nearMissTrack, { backgroundColor: colors.border }]}>
+                <View style={[styles.nearMissFill, { backgroundColor: colors.accent, width: `${progress * 100}%` }]} />
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
       {/* Calendar heatmap — Pro */}
       {isPremiumUser ? (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, gap: 0 }]}>
@@ -484,4 +515,12 @@ const styles = StyleSheet.create({
   heatmapLegendCell: { width: 10, height: 10, borderRadius: 2 },
   heatmapLockText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   heatmapLockCta: { fontSize: 13, fontWeight: '600' },
+  nearMissRow: { gap: 8 },
+  nearMissMeta: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  nearMissIcon: { fontSize: 22, width: 28, textAlign: 'center' },
+  nearMissTitle: { fontSize: 14, fontWeight: '600' },
+  nearMissDesc: { fontSize: 12, marginTop: 1 },
+  nearMissPct: { fontSize: 14, fontWeight: '700', minWidth: 38, textAlign: 'right' },
+  nearMissTrack: { height: 4, borderRadius: 2, overflow: 'hidden' },
+  nearMissFill: { height: 4, borderRadius: 2 },
 });
