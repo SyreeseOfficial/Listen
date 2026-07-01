@@ -17,7 +17,8 @@ const SEED_DAY = Math.floor(Date.now() / 86400000);
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const HEATMAP_WEEKS = 18;
 const HEATMAP_GAP = 2;
-const HEATMAP_CELL = Math.floor((SCREEN_W - 48 - (HEATMAP_WEEKS - 1) * HEATMAP_GAP) / HEATMAP_WEEKS);
+// 48 = container padding (24×2), 36 = card padding (18×2)
+const HEATMAP_CELL = Math.floor((SCREEN_W - 84 - (HEATMAP_WEEKS - 1) * HEATMAP_GAP) / HEATMAP_WEEKS);
 
 function getHeatmapWeeks(sessions: Session[]) {
   const today = new Date();
@@ -406,8 +407,8 @@ export default function StatsScreen() {
               const showMonth = wi === 0 || firstDay.date.getMonth() !== heatmapWeeks[wi - 1][0].date.getMonth();
               return (
                 <View key={wi} style={styles.heatmapCol}>
-                  <Text style={[styles.heatmapMonth, { color: showMonth ? colors.textSecondary : 'transparent' }]}>
-                    {MONTH_ABBR[firstDay.date.getMonth()]}
+                  <Text style={[styles.heatmapMonth, { color: colors.textSecondary }]}>
+                    {showMonth ? MONTH_ABBR[firstDay.date.getMonth()] : ''}
                   </Text>
                   {week.map((day, di) => (
                     <View

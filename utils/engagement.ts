@@ -51,7 +51,7 @@ export function getMilestone(stats: Stats): string | null {
     const badge = SESSION_BADGE[nextSessions];
     if (left <= 5) return badge
       ? `${left} session${left === 1 ? '' : 's'} away from "${badge}"`
-      : `${left} session${left === 1 ? '' : 's'} until ${nextSessions} total`;
+      : `${left} session${left === 1 ? '' : 's'} to your next milestone`;
   }
 
   const totalHours = stats.totalSeconds / 3600;
@@ -61,7 +61,7 @@ export function getMilestone(stats: Stats): string | null {
     const badge = HOUR_BADGE[nextHours];
     if (minsLeft <= 120) return badge
       ? `${minsLeft} min away from "${badge}"`
-      : `${minsLeft} min until ${nextHours}h total`;
+      : `${minsLeft} min to your next milestone`;
   }
 
   if (stats.longestStreak > 0 && stats.currentStreak > 0) {

@@ -37,6 +37,22 @@ const RAW_TICKER = [
   'Charlie T. just hit a 30-day streak',
   'Sage L. rated 10 sessions this month',
   'River S. unlocked "Deep Dive"',
+  'Noah K. finished their longest session yet',
+  'Elena V. is on a 12-day streak',
+  'Theo B. just reached Level 6',
+  'Mia C. logged 5 total hours of listening',
+  'Lucas W. completed their 25th session',
+  'Nora D. unlocked "Three Peat"',
+  'Kai R. just earned "Ritual"',
+  'Zoe M. logged their 10th album',
+  'Finn A. rated a 5-star session',
+  'Isla P. is on a 7-day streak',
+  'Arlo J. hit "Deep Ears" this week',
+  'Luna S. completed a 2-hour listening marathon',
+  'Oscar H. just unlocked "Committed"',
+  'Cleo N. logged a late-night session',
+  'Jasper T. reached a 14-day streak',
+  'Hazel G. finished their 75th session',
 ];
 
 function getTimeUntilMidnight(): string {
@@ -242,7 +258,7 @@ export default function HomeScreen() {
           Animated.timing(tickerY, { toValue: 0, duration: 280, useNativeDriver: true }),
         ]).start();
       });
-    }, 4000);
+    }, 7000);
     return () => clearInterval(interval);
   }, []);
 
@@ -371,7 +387,7 @@ export default function HomeScreen() {
         {/* Insight cards */}
         {cards.length > 0 && (
           <View style={styles.cardsSection}>
-            <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginBottom: 10 }]}>YOUR INSIGHTS</Text>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginBottom: 10, paddingHorizontal: 28 }]}>YOUR INSIGHTS</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cardsRow}>
               {cards.map((card) => (
                 <Pressable
