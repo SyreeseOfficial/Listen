@@ -45,6 +45,12 @@ export default function DownsellScreen() {
         <Pressable style={[styles.startBtn, { backgroundColor: colors.accent }]} onPress={handleStart}>
           <Text style={styles.startBtnText}>Start listening →</Text>
         </Pressable>
+
+        <Pressable hitSlop={12} onPress={() => router.replace('/onboarding/paywall')}>
+          <Text style={[styles.trialLink, { color: colors.textSecondary }]}>
+            Changed your mind? Try 3 days free →
+          </Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -62,4 +68,5 @@ const styles = StyleSheet.create({
   upgradeLine: { fontSize: 13 },
   startBtn: { borderRadius: 16, paddingVertical: 18, alignItems: 'center', marginTop: 4 },
   startBtnText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
+  trialLink: { fontSize: 13, textAlign: 'center', textDecorationLine: 'underline' },
 });
