@@ -7,7 +7,7 @@ const { height } = Dimensions.get('window');
 
 const BENEFITS = [
   { icon: '📊', title: 'Full stats', sub: 'Monthly & all-time breakdowns' },
-  { icon: '🛡', title: 'Unlimited shields', sub: 'Never lose a streak again' },
+  { icon: '🛡', title: 'Unlimited freezes', sub: 'Never lose a streak again' },
   { icon: '📝', title: 'Session notes', sub: 'Log every listening moment' },
   { icon: '∞', title: 'Unlimited gear', sub: 'Track your whole setup' },
 ];

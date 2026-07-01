@@ -9,6 +9,7 @@ export type Session = {
   rating?: number; // 1–5
   album?: string;
   notes?: string;
+  intention?: string;
 };
 
 export type UserProfile = {

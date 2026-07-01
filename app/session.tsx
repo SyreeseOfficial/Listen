@@ -12,13 +12,14 @@ import { formatCountdown } from '../utils/stats';
 export default function SessionScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { minutes, equipment, resumeRemaining, resumeTotal, sessionId: paramSessionId } =
+  const { minutes, equipment, resumeRemaining, resumeTotal, sessionId: paramSessionId, intention } =
     useLocalSearchParams<{
       minutes: string;
       equipment: string;
       resumeRemaining?: string;
       resumeTotal?: string;
       sessionId?: string;
+      intention?: string;
     }>();
 
   const totalSeconds = parseInt(minutes ?? '30', 10) * 60;
@@ -167,10 +168,11 @@ export default function SessionScreen() {
       completedAt: new Date().toISOString(),
       completed,
       equipmentUsed,
+      intention: intention || undefined,
     });
     router.replace({
       pathname: '/complete',
-      params: { minutes, completed: completed ? '1' : '0', sessionId, equipment: equipment ?? '[]' },
+      params: { minutes, completed: completed ? '1' : '0', sessionId, equipment: equipment ?? '[]', intention: intention ?? '' },
     });
   }
 

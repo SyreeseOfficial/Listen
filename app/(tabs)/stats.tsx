@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions } from 'react-native';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useTheme } from '../../context/ThemeContext';
 import { getSessions, getProfile, updateProfile, type Session } from '../../utils/storage';
@@ -10,8 +10,37 @@ import {
 } from '../../utils/engagement';
 import type { Archetype } from '../../utils/engagement';
 
-const { height } = Dimensions.get('window');
+const { height, width: SCREEN_W } = Dimensions.get('window');
 const SEED_DAY = Math.floor(Date.now() / 86400000);
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const HEATMAP_WEEKS = 18;
+const HEATMAP_GAP = 2;
+const HEATMAP_CELL = Math.floor((SCREEN_W - 48 - (HEATMAP_WEEKS - 1) * HEATMAP_GAP) / HEATMAP_WEEKS);
+
+function getHeatmapWeeks(sessions: Session[]) {
+  const today = new Date();
+  const todayDay = today.getDay();
+  const daysToMonday = (todayDay + 6) % 7;
+  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - daysToMonday);
+
+  const sessionDates = new Set(
+    sessions
+      .filter((s) => s.completed)
+      .map((s) => { const d = new Date(s.completedAt); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; })
+  );
+
+  return Array.from({ length: HEATMAP_WEEKS }, (_, wi) => {
+    const weekOffset = HEATMAP_WEEKS - 1 - wi;
+    return Array.from({ length: 7 }, (_, di) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() - weekOffset * 7 + di);
+      const isFuture = d > today;
+      const isToday = d.toDateString() === today.toDateString();
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      return { date: new Date(d), hasSession: !isFuture && sessionDates.has(key), isFuture, isToday };
+    });
+  });
+}
 const BAR_H = 72;
 type Period = 'week' | 'month' | 'all';
 
@@ -96,6 +125,7 @@ export default function StatsScreen() {
   const [period, setPeriod] = useState<Period>('week');
   const [isPremiumUser, setIsPremiumUser] = useState(false);
   const router = useRouter();
+  const heatmapWeeks = useMemo(() => getHeatmapWeeks(rawSessions), [rawSessions]);
 
   useFocusEffect(
     useCallback(() => {
@@ -189,12 +219,12 @@ export default function StatsScreen() {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.shieldLabel, { color: colors.text }]}>
-            {shields > 0 ? `${isPremiumUser ? shields : Math.min(shields, 1)} streak shield${shields !== 1 ? 's' : ''}` : 'No shields'}
+            {shields > 0 ? `${isPremiumUser ? shields : Math.min(shields, 1)} streak freeze${shields !== 1 ? 's' : ''}` : 'No freezes'}
           </Text>
           <Text style={[styles.shieldSub, { color: colors.textSecondary }]}>
             {isPremiumUser
               ? 'Earn 1 every 4-day streak. Protects against a missed day.'
-              : 'Unlock unlimited shields with Pro →'}
+              : 'Unlock unlimited freezes with Pro →'}
           </Text>
         </View>
       </Pressable>
@@ -334,6 +364,61 @@ export default function StatsScreen() {
           </Text>
         </View>
       )}
+
+      {/* Calendar heatmap — Pro */}
+      {isPremiumUser ? (
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, gap: 0 }]}>
+          <Text style={[styles.cardTag, { color: colors.accent, marginBottom: 12 }]}>LISTENING CALENDAR</Text>
+          <View style={styles.heatmapGrid}>
+            {heatmapWeeks.map((week, wi) => {
+              const firstDay = week[0];
+              const showMonth = wi === 0 || firstDay.date.getMonth() !== heatmapWeeks[wi - 1][0].date.getMonth();
+              return (
+                <View key={wi} style={styles.heatmapCol}>
+                  <Text style={[styles.heatmapMonth, { color: showMonth ? colors.textSecondary : 'transparent' }]}>
+                    {MONTH_ABBR[firstDay.date.getMonth()]}
+                  </Text>
+                  {week.map((day, di) => (
+                    <View
+                      key={di}
+                      style={[
+                        styles.heatmapCell,
+                        {
+                          backgroundColor: day.isFuture
+                            ? 'transparent'
+                            : day.hasSession
+                              ? colors.accent
+                              : colors.accent + '22',
+                          borderWidth: day.isToday ? 1.5 : 0,
+                          borderColor: colors.accent,
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+              );
+            })}
+          </View>
+          <View style={styles.heatmapLegend}>
+            <Text style={[styles.heatmapLegendText, { color: colors.textSecondary }]}>Less</Text>
+            {[0.15, 0.35, 0.6, 0.8, 1].map((op, i) => (
+              <View key={i} style={[styles.heatmapLegendCell, { backgroundColor: colors.accent, opacity: op }]} />
+            ))}
+            <Text style={[styles.heatmapLegendText, { color: colors.textSecondary }]}>More</Text>
+          </View>
+        </View>
+      ) : (
+        <Pressable
+          style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, alignItems: 'center', gap: 6 }]}
+          onPress={() => router.push('/paywall')}
+        >
+          <Text style={[styles.cardTag, { color: colors.accent }]}>LISTENING CALENDAR</Text>
+          <Text style={[styles.heatmapLockText, { color: colors.textSecondary }]}>
+            🔒 See your full listening history as a calendar heatmap
+          </Text>
+          <Text style={[styles.heatmapLockCta, { color: colors.accent }]}>Unlock with Pro →</Text>
+        </Pressable>
+      )}
     </ScrollView>
   );
 }
@@ -390,4 +475,13 @@ const styles = StyleSheet.create({
   chartBar: { borderRadius: 4, width: '100%' },
   chartLabel: { fontSize: 11 },
   chartFooter: { fontSize: 12, textAlign: 'center', marginTop: 2 },
+  heatmapGrid: { flexDirection: 'row', gap: HEATMAP_GAP },
+  heatmapCol: { flexDirection: 'column', gap: HEATMAP_GAP },
+  heatmapMonth: { fontSize: 8, fontWeight: '500', height: 14, textAlign: 'center' },
+  heatmapCell: { width: HEATMAP_CELL, height: HEATMAP_CELL, borderRadius: 2 },
+  heatmapLegend: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, justifyContent: 'flex-end' },
+  heatmapLegendText: { fontSize: 10 },
+  heatmapLegendCell: { width: 10, height: 10, borderRadius: 2 },
+  heatmapLockText: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  heatmapLockCta: { fontSize: 13, fontWeight: '600' },
 });

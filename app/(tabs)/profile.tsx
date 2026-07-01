@@ -711,7 +711,7 @@ export default function ProfileScreen() {
                 {"v1.0  —  Session timer, XP & leveling, gear tracking, achievements, streaks, history, stats"}
               </Text>
               <Text style={[styles.changelogEntry, { color: colors.textSecondary }]}>
-                {"Recent  —  History search, monthly & all-time stats, push notifications, weekly recap, streak shields, session sharing, custom notification time, auto-complete toggle, expandable About"}
+                {"Recent  —  History search, monthly & all-time stats, push notifications, weekly recap, streak freezes, session sharing, custom notification time, auto-complete toggle, expandable About"}
               </Text>
             </View>
           )}

@@ -137,8 +137,11 @@ export default function HistoryScreen() {
 
   const currentSort = SORTS[sortIdx];
   const q = search.trim().toLowerCase();
-  const displaySessions = applySort(applyFilter(sessions, filter), currentSort.key)
+  const allFiltered = applySort(applyFilter(sessions, filter), currentSort.key)
     .filter((s) => !q || (s.album ?? '').toLowerCase().includes(q) || (s.notes ?? '').toLowerCase().includes(q));
+  const FREE_LIMIT = 5;
+  const isLocked = !isPremiumUser && sessions.length > FREE_LIMIT;
+  const displaySessions = isLocked ? allFiltered.slice(0, FREE_LIMIT) : allFiltered;
 
   if (sessions.length === 0) {
     return (
@@ -216,6 +219,17 @@ export default function HistoryScreen() {
             </Text>
           </View>
         )}
+        ListFooterComponent={() => isLocked ? (
+          <Pressable
+            style={[styles.lockedBanner, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => router.push('/paywall')}
+          >
+            <Text style={[styles.lockedBannerText, { color: colors.textSecondary }]}>
+              🔒 {sessions.length - FREE_LIMIT} more sessions hidden
+            </Text>
+            <Text style={[styles.lockedBannerCta, { color: colors.accent }]}>Unlock full history with Pro →</Text>
+          </Pressable>
+        ) : null}
         renderItem={({ item }) => {
           const isExpanded = expanded.has(item.id);
           const isEditing = editingId === item.id;
@@ -456,6 +470,9 @@ const styles = StyleSheet.create({
   shareBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
   shareBtnText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
   shareCancel: { textAlign: 'center', fontSize: 15, paddingVertical: 4 },
+  lockedBanner: { borderWidth: 1.5, borderRadius: 14, padding: 18, marginTop: 10, alignItems: 'center', gap: 6 },
+  lockedBannerText: { fontSize: 14 },
+  lockedBannerCta: { fontSize: 13, fontWeight: '600' },
   // Empty states
   emptyFilter: { paddingTop: 48, alignItems: 'center' },
   emptyFilterText: { fontSize: 15 },

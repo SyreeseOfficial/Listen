@@ -11,6 +11,7 @@ import { getLevelInfo, getStreakMultiplierLabel, getNearMissAchievements, getEnd
 import { getFakeSocialCard } from '../../utils/social';
 import { getCurrentWeekBadge, checkWeeklyBadge } from '../../constants/timeBadges';
 import * as Haptics from '../../utils/haptics';
+import { scheduleStreakRiskTonight } from '../../utils/notifications';
 
 const { height, width } = Dimensions.get('window');
 const DURATIONS = Array.from({ length: 120 }, (_, i) => i + 1);
@@ -40,6 +41,7 @@ export default function HomeScreen() {
   const [milestone, setMilestone] = useState<string | null>(null);
   const [cards, setCards] = useState<InsightCard[]>([]);
   const [nearMiss, setNearMiss] = useState<ReturnType<typeof getNearMissAchievements>>([]);
+  const [weeklyGoal, setWeeklyGoal] = useState<{ done: number; total: number } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -97,7 +99,7 @@ export default function HomeScreen() {
             title: 'Your streak broke.',
             body: `Your ${stats.longestStreak}-day best is gone. Every day you wait costs momentum.`,
             cta: '→ Revive with Pro',
-            onPress: () => Alert.alert('Listen Pro', 'Streak revival, unlimited shields, and more.\n\nComing soon.', [{ text: 'Got it' }]),
+            onPress: () => Alert.alert('Listen Pro', 'Streak revival, unlimited freezes, and more.\n\nComing soon.', [{ text: 'Got it' }]),
           });
         }
 
@@ -172,6 +174,32 @@ export default function HomeScreen() {
         });
 
         setCards(built);
+
+        // Weekly goal progress
+        const commitment = p?.weeklyCommitment;
+        if (commitment) {
+          const now = new Date();
+          const daysToMonday = (now.getDay() + 6) % 7;
+          const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysToMonday);
+          const done = sessions.filter(
+            (s) => s.completed && new Date(s.completedAt) >= weekStart
+          ).length;
+          setWeeklyGoal({ done: Math.min(done, commitment), total: commitment });
+        } else {
+          setWeeklyGoal(null);
+        }
+
+        // Streak at-risk notification
+        if (p?.notificationsEnabled) {
+          const today = new Date();
+          const todayStr = today.toDateString();
+          const hasSessionToday = sessions.some(
+            (s) => s.completed && new Date(s.completedAt).toDateString() === todayStr
+          );
+          if (!hasSessionToday) {
+            scheduleStreakRiskTonight(p?.notificationHour ?? 21);
+          }
+        }
       }
       load();
     }, [])
@@ -298,6 +326,28 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* Weekly goal widget */}
+      {weeklyGoal && (
+        <View style={styles.goalSection}>
+          <View style={styles.goalHeader}>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary, marginBottom: 0 }]}>WEEKLY GOAL</Text>
+            <Text style={[styles.goalCount, { color: weeklyGoal.done >= weeklyGoal.total ? colors.accent : colors.text }]}>
+              {weeklyGoal.done}/{weeklyGoal.total} days
+              {weeklyGoal.done >= weeklyGoal.total ? '  ✓' : ''}
+            </Text>
+          </View>
+          <View style={[styles.goalTrack, { backgroundColor: colors.border }]}>
+            <View style={[
+              styles.goalFill,
+              {
+                backgroundColor: colors.accent,
+                width: `${Math.min((weeklyGoal.done / weeklyGoal.total) * 100, 100)}%`,
+              },
+            ]} />
+          </View>
+        </View>
+      )}
+
       {/* Insight cards */}
       {cards.length > 0 && (
         <>
@@ -393,6 +443,11 @@ const styles = StyleSheet.create({
     fontSize: 11, fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase',
     paddingHorizontal: 24, marginBottom: 10,
   },
+  goalSection: { paddingHorizontal: 24, marginBottom: 20, gap: 10 },
+  goalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 0 },
+  goalCount: { fontSize: 14, fontWeight: '600' },
+  goalTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  goalFill: { height: 6, borderRadius: 3 },
   cardsRow: { paddingHorizontal: 24, gap: 10, paddingBottom: 4, paddingRight: 32 },
   insightCard: {
     width: CARD_W, borderWidth: 1.5, borderRadius: 18, padding: 18, gap: 6,

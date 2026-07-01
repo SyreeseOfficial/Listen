@@ -73,12 +73,46 @@ export async function scheduleWeeklyRecap(): Promise<void> {
   } catch (_) {}
 }
 
+export async function scheduleStreakRiskTonight(hour = 21): Promise<void> {
+  try {
+    await ensureChannel();
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const n of scheduled) {
+      if ((n.content.data as any)?.tag === 'streak-risk') {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+      }
+    }
+    const now = new Date();
+    const tonight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, 0, 0);
+    if (tonight.getTime() <= now.getTime()) return;
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Your streak is at risk',
+        body: "You haven't listened today. Keep your streak alive.",
+        data: { tag: 'streak-risk' },
+      },
+      trigger: { date: tonight, type: Notifications.SchedulableTriggerInputTypes.DATE },
+    });
+  } catch (_) {}
+}
+
+export async function cancelStreakRiskNotification(): Promise<void> {
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const n of scheduled) {
+      if ((n.content.data as any)?.tag === 'streak-risk') {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier);
+      }
+    }
+  } catch (_) {}
+}
+
 export async function cancelAllListenNotifications(): Promise<void> {
   try {
     const scheduled = await Notifications.getAllScheduledNotificationsAsync();
     for (const n of scheduled) {
       const tag = (n.content.data as any)?.tag;
-      if (tag === 'daily-reminder' || tag === 'weekly-recap') {
+      if (tag === 'daily-reminder' || tag === 'weekly-recap' || tag === 'streak-risk') {
         await Notifications.cancelScheduledNotificationAsync(n.identifier);
       }
     }

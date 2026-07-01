@@ -9,6 +9,14 @@ import { getProfile } from '../utils/storage';
 
 const { height } = Dimensions.get('window');
 
+const INTENTIONS = [
+  { key: 'enjoy', label: 'Just enjoy', emoji: '🎵' },
+  { key: 'critical', label: 'Listen critically', emoji: '🔍' },
+  { key: 'relax', label: 'Wind down', emoji: '😌' },
+  { key: 'focus', label: 'Focus session', emoji: '💪' },
+  { key: 'discover', label: 'Discover', emoji: '✨' },
+];
+
 const TIPS = [
   { id: 'dnd', label: 'Do Not Disturb', sub: 'Block calls and notifications' },
   { id: 'airplane', label: 'Airplane Mode', sub: 'Full offline disconnection' },
@@ -23,6 +31,7 @@ export default function PreSession() {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [equipment, setEquipment] = useState<string[]>([]);
   const [selectedGear, setSelectedGear] = useState<Record<string, boolean>>({});
+  const [intention, setIntention] = useState<string | null>(null);
 
   useEffect(() => {
     getProfile().then((p) => setEquipment(p?.equipment ?? []));
@@ -38,12 +47,17 @@ export default function PreSession() {
     setSelectedGear((prev) => ({ ...prev, [item]: !prev[item] }));
   }
 
+  function pickIntention(key: string) {
+    Haptics.selectionAsync();
+    setIntention((prev) => (prev === key ? null : key));
+  }
+
   function begin() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const chosen = equipment.filter((g) => selectedGear[g]);
     router.replace({
       pathname: '/session',
-      params: { minutes, equipment: JSON.stringify(chosen) },
+      params: { minutes, equipment: JSON.stringify(chosen), intention: intention ?? '' },
     });
   }
 
@@ -108,6 +122,33 @@ export default function PreSession() {
         </View>
       )}
 
+      {/* Deep Listen intention */}
+      <View style={styles.intentionSection}>
+        <Text style={[styles.gearLabel, { color: colors.textSecondary }]}>INTENTION  <Text style={{ fontWeight: '400', letterSpacing: 0, textTransform: 'none' }}>optional</Text></Text>
+        <View style={styles.gearChips}>
+          {INTENTIONS.map((item) => {
+            const selected = intention === item.key;
+            return (
+              <Pressable
+                key={item.key}
+                style={[
+                  styles.chip,
+                  {
+                    borderColor: selected ? colors.accent : colors.border,
+                    backgroundColor: selected ? colors.accent : colors.card,
+                  },
+                ]}
+                onPress={() => pickIntention(item.key)}
+              >
+                <Text style={[styles.chipText, { color: selected ? '#FFF' : colors.text }]}>
+                  {item.emoji} {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
       <Pressable style={[styles.button, { backgroundColor: colors.accent }]} onPress={begin}>
         <Text style={styles.buttonText}>I'm ready</Text>
       </Pressable>
@@ -131,6 +172,7 @@ const styles = StyleSheet.create({
   tipLabel: { fontSize: 16, fontWeight: '500' },
   tipSub: { fontSize: 13, marginTop: 2 },
   gearSection: { marginBottom: 32, gap: 12 },
+  intentionSection: { marginBottom: 32, gap: 12 },
   gearLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase' },
   gearChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderWidth: 1.5, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
